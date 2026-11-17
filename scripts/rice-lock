@@ -1,0 +1,12 @@
+#!/bin/bash
+# Lock the screen: the rice's manga lock (Quickshell, `qs -c rice`), or hyprlock when
+# Settings > Lock screen > "lock with" says hyprlock, Quickshell is not running or hangs,
+# or its lock did not engage. Used by SUPER+L and hypridle (lock_cmd); safe to run while already locked.
+prefs="$HOME/.config/rice/prefs.json"
+locker=$(jq -r '.locker // "quickshell"' "$prefs" 2>/dev/null)
+
+if [ "$locker" != hyprlock ] && timeout 2 qs -c rice ipc call lock lock >/dev/null 2>&1 &&
+    [ "$(timeout 2 qs -c rice ipc call lock isLocked 2>/dev/null)" = true ]; then
+    exit 0
+fi
+pidof hyprlock >/dev/null || exec hyprlock

@@ -1,0 +1,10 @@
+# throwaway screenshots from testing (the keepers are in .test/ref/)
+.test/shots/
+# generated: install.sh copies the active preset's symbol here
+wallust/templates/symbol.svg
+# manga pages downloaded by .test/fetch_manga.py (re-fetchable)
+.test/manga/
+__pycache__/
+
+# dev-only test harness: kept locally, not published
+.test/

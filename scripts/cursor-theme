@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""Build the "dart" cursor theme in the wallpaper's accent and switch to it.
+
+    cursor-theme                 build ~/.local/share/icons/rice-dart and apply it
+    cursor-theme --accent HEX    use this colour for the link cursor
+    cursor-theme --render DIR    only write the SVG sources into DIR (no tools needed)
+
+The look matches the demo: flat, see-through shapes with corners rounded by a
+same-colour stroke. The normal arrow is white at 85%; the link cursor is the
+wallpaper accent at 90%, so `wall` runs this again after every change.
+The theme has both formats: XCursor (cursors/, for X11 and most toolkits) and
+hyprcursor (hyprcursors/, drawn from the SVGs at any size by Hyprland).
+"""
+import argparse, json, os, shutil, subprocess, sys, tempfile
+
+THEME = "rice-dart"
+SIZE = 26                    # nominal cursor size in pixels
+XCURSOR_SIZES = (26, 39, 52)  # 1x, 1.5x and 2x screen scale
+WHITE, WHITE_OPACITY, ACCENT_OPACITY = "#FFFFFF", .85, .9
+FRAME_MS = 40                # busy animation: 12 frames, a quarter turn in 480 ms
+FRAMES = 12
+
+# Shapes on a 64x64 canvas (the demo's viewBox).
+DART = "M20 4 L48.7 37.2 L30.6 33.1 L19.4 47.9 Z"         # paper-dart head, 20 degrees right of vertical
+IBEAM = "M22 8 L42 8 L36 14 V50 L42 56 H22 L28 50 V14 Z"
+STAR = "M32 6 L39 25 L58 32 L39 39 L32 58 L25 39 L6 32 L25 25 Z"   # move: four dart points
+ARROW = "M6 32 L19 21 V30 H45 V21 L58 32 L45 43 V34 H19 V43 Z"     # resize, left-right
+DIAMOND = "M32 12 L52 32 L32 52 L12 32 Z"                          # busy: hollow diamond
+SMALL_DIAMOND = "M52 45 L61 54 L52 63 L43 54 Z"                    # busy badge next to the dart
+CROSS = "M32 6 V22 M32 42 V58 M6 32 H22 M42 32 H58"
+DART_HOT = (8 / 26 * 64, 1 / 26 * 64)   # the demo's hotspot (8,1) at 26 px
+CENTRE = (32, 32)
+
+
+# ---------- drawing ----------
+def solid(d, col, transform=""):
+    """Filled shape; the same-colour round-joined stroke rounds the corners without a border."""
+    t = f' transform="{transform}"' if transform else ""
+    return f'<path d="{d}" fill="{col}" stroke="{col}" stroke-width="8" stroke-linejoin="round"{t}/>'
+
+
+def outline(d, col, width=8, transform=""):
+    t = f' transform="{transform}"' if transform else ""
+    return (f'<path d="{d}" fill="none" stroke="{col}" stroke-width="{width}" '
+            f'stroke-linejoin="round" stroke-linecap="round"{t}/>')
+
+
+def svg(body, opacity):
+    # Opacity on the group, so overlapping parts do not get darker where they meet.
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">'
+            f'<g opacity="{opacity}">{body}</g></svg>')
+
+
+def spin(i, cx=32, cy=32):
+    return f"rotate({90 * i / FRAMES:.2f} {cx} {cy})"
+
+
+def shapes(accent):
+    """name -> (list of SVG frames, hotspot on the 64 canvas, other names that use it)."""
+    W, op = WHITE, WHITE_OPACITY
+    return {
+        "default": ([svg(solid(DART, W), op)], DART_HOT,
+                    ["left_ptr", "arrow", "top_left_arrow", "left_arrow", "right_ptr", "center_ptr",
+                     "context-menu", "help", "question_arrow", "whats_this", "left_ptr_help",
+                     "copy", "alias", "link", "dnd-copy", "dnd-link", "dnd-ask", "dnd-none",
+                     "zoom-in", "zoom-out", "pirate", "X_cursor", "x-cursor",
+                     "d9ce0ab605698f320427677b458ad60b", "5c6cd98b3f3ebcb1f9c7f1c204630408",
+                     "1081e37283d90000800003c07f3ef6bf", "6407b0e94181790501fd1e167b474872",
+                     "3085a0e285430894940527032f8b26df", "640fb0e74195791501fd1ed57b41487f",
+                     "a2a266d0498c3104214a47bd64ab0fc8", "b66166c04f8c3109214a4fbd64a50fc8"]),
+        "pointer": ([svg(solid(DART, accent), ACCENT_OPACITY)], DART_HOT,
+                    ["hand", "hand1", "hand2", "pointing_hand", "grab", "openhand",
+                     "9d800788f1b08800ae810202380a0822", "e29285e634086352946a0e7090d73106",
+                     "5aca4d189052212118709018842178c0", "9141b49c8149039304290b508d208c40"]),
+        "text": ([svg(solid(IBEAM, W), op)], (13 / 26 * 64, 13 / 26 * 64),
+                 ["xterm", "ibeam", "vertical-text"]),
+        "wait": ([svg(outline(DIAMOND, W, transform=spin(i)), op) for i in range(FRAMES)], CENTRE,
+                 ["watch"]),
+        "progress": ([svg(solid(DART, W) + outline(SMALL_DIAMOND, W, 5, spin(i, 52, 54)), op)
+                      for i in range(FRAMES)], DART_HOT,
+                     ["left_ptr_watch", "half-busy", "08e8e1c95fe2fc01f976f1e063a24ccd",
+                      "3ecb610c1bf2410f44200f48c40d3599", "00000000000000020006000e7e9ffc3f"]),
+        "move": ([svg(solid(STAR, W), op)], CENTRE,
+                 ["fleur", "all-scroll", "size_all", "grabbing", "closedhand", "dnd-move",
+                  "4498f0e0c1937ffe01fd06f973665830", "9081237383d90e509aa00f00170e968f",
+                  "fcf21c00b30f7e3f83fe0dfd12e71cff"]),
+        "ew-resize": ([svg(solid(ARROW, W), op)], CENTRE,
+                      ["col-resize", "e-resize", "w-resize", "sb_h_double_arrow", "h_double_arrow",
+                       "size_hor", "left_side", "right_side", "split_h",
+                       "028006030e0e7ebffc7f7070c0600140", "14fef782d02440884392942c11205230"]),
+        "ns-resize": ([svg(solid(ARROW, W, "rotate(90 32 32)"), op)], CENTRE,
+                      ["row-resize", "n-resize", "s-resize", "sb_v_double_arrow", "v_double_arrow",
+                       "size_ver", "top_side", "bottom_side", "split_v", "double_arrow",
+                       "00008160000006810000408080010102", "2870a09082c103050810ffdffffe0204"]),
+        "nwse-resize": ([svg(solid(ARROW, W, "rotate(45 32 32)"), op)], CENTRE,
+                        ["nw-resize", "se-resize", "bd_double_arrow", "size_fdiag",
+                         "top_left_corner", "bottom_right_corner", "c7088f0f3e6c8088236ef8e1e3e70000"]),
+        "nesw-resize": ([svg(solid(ARROW, W, "rotate(-45 32 32)"), op)], CENTRE,
+                        ["ne-resize", "sw-resize", "fd_double_arrow", "size_bdiag",
+                         "top_right_corner", "bottom_left_corner", "fcf1c3c7cd4491d801f1e1c78f100000"]),
+        "crosshair": ([svg(outline(CROSS, W, 6), op)], CENTRE,
+                      ["cross", "tcross", "cross_reverse", "diamond_cross", "cell", "plus", "color-picker"]),
+        "not-allowed": ([svg('<circle cx="32" cy="32" r="21" fill="none" stroke="%s" stroke-width="7"/>' % W
+                             + outline("M18 18 L46 46", W, 7), op)], CENTRE,
+                        ["no-drop", "forbidden", "circle", "crossed_circle", "dnd-no-drop",
+                         "03b6e0fcb3499374a867c041f52298f0"]),
+    }
+
+
+# ---------- inputs ----------
+def accent_from_palette():
+    path = os.path.expanduser("~/.cache/rice/palette.json")
+    try:
+        with open(path) as f:
+            return json.load(f)["accent"]
+    except (OSError, KeyError, ValueError):
+        print(f"cursor-theme: no accent in {path}, using white", file=sys.stderr)
+        return WHITE
+
+
+def valid_hex(h):
+    return len(h) == 7 and h[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in h[1:])
+
+
+def need(*tools):
+    missing = [t for t in tools if not shutil.which(t)]
+    if missing:
+        sys.exit("cursor-theme: missing " + ", ".join(missing))
+
+
+def run(*cmd):
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+
+
+# ---------- theme formats ----------
+def write_sources(out, accent):
+    """One folder per shape with its SVG frames."""
+    for name, (frames, _, _) in shapes(accent).items():
+        os.makedirs(os.path.join(out, name), exist_ok=True)
+        for i, frame in enumerate(frames):
+            with open(os.path.join(out, name, f"{name}_{i:02d}.svg"), "w") as f:
+                f.write(frame)
+
+
+def build_xcursor(src, work, theme, accent):
+    cursors = os.path.join(theme, "cursors")
+    os.makedirs(cursors)
+    for name, (frames, (hx, hy), aliases) in shapes(accent).items():
+        lines = []
+        for i in range(len(frames)):
+            for size in XCURSOR_SIZES:
+                png = os.path.join(work, f"{name}_{i:02d}_{size}.png")
+                run("rsvg-convert", "-w", str(size), "-h", str(size), "-o", png,
+                    os.path.join(src, name, f"{name}_{i:02d}.svg"))
+                delay = f" {FRAME_MS}" if len(frames) > 1 else ""
+                lines.append(f"{size} {round(hx * size / 64)} {round(hy * size / 64)} {png}{delay}")
+        cfg = os.path.join(work, f"{name}.cfg")
+        with open(cfg, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        run("xcursorgen", cfg, os.path.join(cursors, name))
+        for alias in aliases:
+            os.symlink(name, os.path.join(cursors, alias))
+
+
+def build_hyprcursor(src, work, theme, accent):
+    tree = os.path.join(work, "hypr")
+    os.makedirs(tree)
+    with open(os.path.join(tree, "manifest.hl"), "w") as f:
+        f.write(f"name = {THEME}\ndescription = Rice dart cursors\nversion = 1\n"
+                "cursors_directory = hyprcursors\n")
+    for name, (frames, (hx, hy), aliases) in shapes(accent).items():
+        d = os.path.join(tree, "hyprcursors", name)
+        shutil.copytree(os.path.join(src, name), d)
+        meta = ["resize_algorithm = bilinear", f"hotspot_x = {hx / 64:.4f}", f"hotspot_y = {hy / 64:.4f}",
+                "nominal_size = 1.0"]
+        meta += [f"define_override = {a}" for a in aliases]
+        delay = f", {FRAME_MS}" if len(frames) > 1 else ""
+        meta += [f"define_size = 0, {name}_{i:02d}.svg{delay}" for i in range(len(frames))]
+        with open(os.path.join(d, "meta.hl"), "w") as f:
+            f.write("\n".join(meta) + "\n")
+    built = os.path.join(work, "hypr-out")
+    os.makedirs(built)  # hyprcursor-util only makes <output>/theme_<name>, not <output> itself
+    run("hyprcursor-util", "--create", tree, "--output", built)
+    made = next(os.path.join(built, d) for d in os.listdir(built)
+                if os.path.isfile(os.path.join(built, d, "manifest.hl")))
+    shutil.copy(os.path.join(made, "manifest.hl"), theme)
+    shutil.copytree(os.path.join(made, "hyprcursors"), os.path.join(theme, "hyprcursors"))
+
+
+def install(accent):
+    need("rsvg-convert", "xcursorgen", "hyprcursor-util")
+    icons = os.path.expanduser("~/.local/share/icons")
+    os.makedirs(icons, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=icons, prefix=".rice-dart-") as work:
+        src, theme = os.path.join(work, "src"), os.path.join(work, THEME)
+        write_sources(src, accent)
+        os.makedirs(theme)
+        with open(os.path.join(theme, "index.theme"), "w") as f:
+            f.write(f"[Icon Theme]\nName={THEME}\nComment=Rice dart cursors\n")
+        build_xcursor(src, work, theme, accent)
+        build_hyprcursor(src, work, theme, accent)
+        # Swap the finished theme in, so a failed build never leaves a half theme behind.
+        dest = os.path.join(icons, THEME)
+        old = os.path.join(work, "old")
+        if os.path.exists(dest):
+            os.rename(dest, old)
+        os.rename(theme, dest)
+
+
+def apply():
+    if shutil.which("hyprctl"):
+        subprocess.run(["hyprctl", "setcursor", THEME, str(SIZE)], stdout=subprocess.DEVNULL)
+    if shutil.which("gsettings"):  # GTK apps; already open windows keep the old cursor until restarted
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-theme", THEME])
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-size", str(SIZE)])
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--accent", help="link cursor colour as #rrggbb (default: ~/.cache/rice/palette.json)")
+    ap.add_argument("--render", metavar="DIR", help="only write the SVG sources into DIR")
+    a = ap.parse_args()
+    accent = a.accent or accent_from_palette()
+    if not valid_hex(accent):
+        sys.exit(f"cursor-theme: accent must be #rrggbb, got {accent!r}")
+    if a.render:
+        write_sources(a.render, accent)
+        return
+    install(accent)
+    apply()
+
+
+if __name__ == "__main__":
+    main()

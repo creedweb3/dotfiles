@@ -1,0 +1,59 @@
+#!/bin/bash
+# Set the wallpaper and re-colour the whole desktop from it.
+#   wall <image>     use this image
+#   wall --pick      choose from ~/Pictures/wallpapers with rofi
+#   wall --restore   reapply the last one (at login)
+#   wall --colours <image>   only write the colours (no wallpaper, no reloads; used by install.sh)
+# Colours come from palette-pick (the same picker the demo and boot-theme use) and wallust
+# writes them into every app's template.
+set -u
+state="$HOME/.cache/wall/current"
+dir="$HOME/Pictures/wallpapers"
+
+case "${1:-}" in
+    --restore) img=$(cat "$state" 2>/dev/null) ;;
+    --colours) img="${2:-}"; only_colours=1 ;;
+    --pick) img=$(find "$dir" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) |
+                  sort | rofi -dmenu -i -p "wallpaper") ;;
+    "") echo "usage: wall <image> | --pick | --restore | --colours <image>" >&2; exit 2 ;;
+    *) img="$1" ;;
+esac
+[ -n "${img:-}" ] && [ -f "$img" ] || exit 1
+
+mkdir -p "$(dirname "$state")"
+realpath "$img" > "$state"
+
+# palette-pick lives in /usr/local/bin (install.sh), or beside this script in the repo.
+pick=$(command -v palette-pick || echo "$(dirname "$(realpath "$0")")/palette-pick")
+colours() {
+    local cache="$HOME/.cache/rice" tmp
+    mkdir -p "$cache"
+    tmp=$(mktemp "$cache/.palette.XXXXXX") || return 1
+    # Write then rename, so Quickshell never reads a half-written palette.json.
+    "$pick" "$img" > "$tmp" && mv -f "$tmp" "$cache/palette.json" || { rm -f "$tmp"; return 1; }
+    "$pick" --wallust "$img" > "$cache/wallust-scheme.json" &&
+        wallust cs -q -f pywal "$cache/wallust-scheme.json" || return 1
+    # hyprlock reads neither SVG nor a path from a file: give it a fixed link and a PNG symbol.
+    ln -sfn "$(realpath "$img")" "$cache/wallpaper"
+    rsvg-convert -h 512 "$cache/symbol.svg" -o "$cache/symbol.png" 2>/dev/null || true
+}
+if [ -n "${only_colours:-}" ]; then colours; exit; fi
+
+# awww (formerly swww). Wave wipe: the new wallpaper sweeps in from the right behind a rolling wavy edge.
+# High fps and a sine-like curve keep it smooth (set fps to your monitor's refresh rate).
+awww img "$img" --transition-type wave --transition-angle 20 --transition-wave 30,30     --transition-duration 1.2 --transition-fps 165 --transition-bezier .45,0,.55,1
+colours
+# The pointer cursor uses the accent, so rebuild the cursor theme too (it reads palette.json).
+[ -x "$HOME/.local/bin/cursor-theme" ] && "$HOME/.local/bin/cursor-theme" >/dev/null 2>&1 &
+
+# Reload everything that reads the generated colours.
+hyprctl reload >/dev/null 2>&1
+qs -c rice ipc call theme reload >/dev/null 2>&1
+pkill -SIGUSR1 kitty
+# GTK 3 apps reread gtk.css when the theme name changes; GTK 4 and Qt apps pick it up in new windows.
+theme=$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null)
+if [ -n "$theme" ]; then
+    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+    gsettings set org.gnome.desktop.interface gtk-theme "$theme"
+fi
+command -v spicetify >/dev/null && spicetify apply -q >/dev/null 2>&1 &

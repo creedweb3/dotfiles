@@ -1,0 +1,27 @@
+# wallust writes the palette into every app's colours. The palette itself comes from
+# palette-pick (scripts/wall runs `wallust cs` with its output), so the desktop, the demo
+# and the boot screens share one picker. The settings below only matter for `wallust run`.
+# kmeans + lch fails on low-colour wallpapers ("Not enough colors!").
+backend = "fastresize"
+color_space = "lch"
+palette = "dark16"
+check_contrast = true
+
+[templates]
+hypr      = { template = "hypr.conf",      target = "~/.config/hypr/colors.conf" }
+hyprlua   = { template = "hypr.lua",       target = "~/.config/hypr/colors.lua" }
+kitty     = { template = "kitty.conf",     target = "~/.config/kitty/colors.conf" }
+rofi      = { template = "rofi.rasi",      target = "~/.config/rofi/colors.rasi" }
+btop      = { template = "btop.theme",     target = "~/.config/btop/themes/wallust.theme" }
+cava      = { template = "cava",           target = "~/.config/cava/config" }
+fastfetch = { template = "fastfetch.jsonc", target = "~/.config/fastfetch/config.jsonc" }
+spicetify = { template = "spicetify.ini",  target = "~/.config/spicetify/Themes/wallust/color.ini" }
+vesktop   = { template = "vesktop.css",    target = "~/.config/vesktop/themes/wallust.theme.css" }
+yazi      = { template = "yazi.toml",      target = "~/.config/yazi/theme.toml" }
+gtk3      = { template = "gtk.css",        target = "~/.config/gtk-3.0/gtk.css" }
+gtk4      = { template = "gtk.css",        target = "~/.config/gtk-4.0/gtk.css" }
+qt6ct     = { template = "qt6ct.conf",     target = "~/.config/qt6ct/colors/wallust.conf" }
+# openTHX app: reads this file and recolours itself live (app/lib/rice.dart).
+openthx   = { template = "openthx.json",   target = "~/.config/openthx/colors.json" }
+# The active preset: templates/symbol.svg links to presets/<name>/symbol.svg (not in git).
+symbol    = { template = "symbol.svg", target = "~/.cache/rice/symbol.svg" }

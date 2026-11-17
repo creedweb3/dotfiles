@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Pick the theme palette from a wallpaper, all in one colour family.
+
+Every colour is a tint of the wallpaper's dominant hue, so panels, borders,
+text and accents blend with the wallpaper instead of mixing in other colours:
+
+    colourful wallpaper    (>= 8% vivid pixels)  hue-tinted panels, vivid accent,
+                                                 accent2 = lighter same hue
+    hint of colour         (2-8% vivid)          neutral panels, accent from the hue
+    black/white/grey       (< 2% vivid)          neutral greys, white accent
+
+Usage: palette-pick <wallpaper>             prints the palette as JSON
+       palette-pick --wallust <wallpaper>   prints it as a pywal colour scheme
+                                            for `wallust cs -f pywal <file>`
+"""
+import colorsys, json, math, sys
+from PIL import Image
+
+COLOURFUL, HINT = .08, .02
+
+
+def hsl(h, s, l):
+    r, g, b = colorsys.hls_to_rgb(h % 1, max(0, min(1, l)), max(0, min(1, s)))
+    return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def lum(hexc):
+    f = lambda c: c / 12.92 if c <= .03928 else ((c + .055) / 1.055) ** 2.4
+    r, g, b = (f(int(hexc[i:i + 2], 16) / 255) for i in (1, 3, 5))
+    return .2126 * r + .7152 * g + .0722 * b
+
+
+def contrast(a, b):
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + .05) / (lo + .05)
+
+
+def readable(hue, sat, on, start=.6, need=4.5):
+    """Lightest-needed colour of this hue that reads on the `on` colour."""
+    l = start
+    while contrast(hsl(hue, sat, l), on) < need and l < .9:
+        l += .03
+    return hsl(hue, sat, l)
+
+
+def lighten(hexc, dl):
+    h, l, s = colorsys.rgb_to_hls(*(int(hexc[i:i + 2], 16) / 255 for i in (1, 3, 5)))
+    return hsl(h, s, l + dl)
+
+
+def analyse(path):
+    """Share of vivid pixels and their dominant hue and saturation."""
+    im = Image.open(path).convert("RGB")
+    w, h = im.size
+    cw, ch = (w, w * 9 / 16) if w / h < 16 / 9 else (h * 16 / 9, h)
+    im = im.crop((int((w - cw) / 2), int((h - ch) / 2), int((w + cw) / 2), int((h + ch) / 2))).resize((160, 90))
+    px = [colorsys.rgb_to_hsv(*(c / 255 for c in p)) for p in im.get_flattened_data()]
+    vivid = [(hh, s, v) for hh, s, v in px if s > .4 and v > .3]
+    share = len(vivid) / len(px)
+    if not vivid:
+        return share, 0, 0
+    bins = [0.0] * 36
+    for hh, s, v in vivid:
+        bins[int(hh * 36) % 36] += s * v
+    top = max(range(36), key=bins.__getitem__)
+    near = [(hh, s) for hh, s, v in vivid if min(abs(int(hh * 36) - top), 36 - abs(int(hh * 36) - top)) <= 1]
+    x = sum(math.cos(2 * math.pi * hh) for hh, _ in near)
+    y = sum(math.sin(2 * math.pi * hh) for hh, _ in near)
+    sat = sorted(s for _, s in near)[len(near) // 2]
+    return share, (math.atan2(y, x) / (2 * math.pi)) % 1, sat
+
+
+def pick(path):
+    share, hue, sat = analyse(path)
+    if share < HINT:
+        kind, tint, acc_s = "mono", 0, 0
+    elif share < COLOURFUL:
+        kind, tint, acc_s = "hint", 0, min(.85, max(.55, sat))
+    else:
+        kind, tint, acc_s = "colourful", min(.35, .12 + share), min(.85, max(.55, sat))
+    p = {
+        "kind": kind,
+        "bg": hsl(hue, tint, .05),
+        "panel": hsl(hue, tint * .9, .09),
+        "muted": hsl(hue, tint * .7, .26),
+        "dim": hsl(hue, tint * .5, .58),
+        "fg": hsl(hue, tint * .4, .91),
+    }
+    if kind == "mono":
+        p["accent"], p["accent2"] = "#E8E8E8", "#9E9E9E"
+    else:
+        l = .55
+        while contrast(hsl(hue, acc_s, l), p["panel"]) < 4 and l < .85:  # readable on the panels
+            l += .03
+        p["accent"], p["accent2"] = hsl(hue, acc_s, l), hsl(hue, acc_s * .75, min(.85, l + .17))
+    p["warn"] = readable(0, .7, p["panel"])
+    return p
+
+
+# Terminal and status colours (red, green, yellow, magenta) stay recognisable,
+# lifted until they read on the background.
+ANSI = {1: 0, 2: 130 / 360, 3: 45 / 360, 5: 320 / 360}
+
+
+def wallust_scheme(p):
+    """Map the palette roles onto the 16 slots the wallust templates use."""
+    c = {0: p["panel"], 7: p["dim"], 8: p["muted"], 15: p["fg"],
+         4: p["accent"], 12: lighten(p["accent"], .1), 6: p["accent2"], 14: p["accent2"]}
+    for n, hue in ANSI.items():
+        c[n] = p["warn"] if n == 1 else readable(hue, .6, p["bg"])
+        c[n + 8] = lighten(c[n], .1)
+    return {"special": {"background": p["bg"], "foreground": p["fg"], "cursor": p["accent"]},
+            "colors": {f"color{n}": c[n] for n in range(16)}}
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args[:1] == ["--wallust"] and len(args) == 2:
+        print(json.dumps(wallust_scheme(pick(args[1])), indent=1))
+    elif len(args) == 1 and not args[0].startswith("--"):
+        print(json.dumps(pick(args[0]), indent=1))
+    else:
+        sys.exit(__doc__)

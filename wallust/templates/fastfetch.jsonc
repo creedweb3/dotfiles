@@ -1,0 +1,28 @@
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "source": "~/.config/fastfetch/logo.txt",
+        "type": "file",
+        "color": { "1": "{{color4}}" },
+        "padding": { "top": 1, "right": 4 }
+    },
+    "display": {
+        "separator": "  ",
+        "color": { "keys": "{{color4}}", "title": "{{color6}}" }
+    },
+    "modules": [
+        { "type": "custom", "format": "╭────────────────────────────────────────╮" },
+        { "type": "os", "key": "│  os" },
+        { "type": "kernel", "key": "│  kernel" },
+        { "type": "packages", "key": "│ 󰏖 packages" },
+        { "type": "wm", "key": "│  wm" },
+        { "type": "terminal", "key": "│  terminal" },
+        { "type": "cpu", "key": "│  cpu", "showPeCoreCount": false },
+        { "type": "gpu", "key": "│ 󰢮 gpu" },
+        { "type": "memory", "key": "│  memory" },
+        { "type": "uptime", "key": "│ 󰅐 uptime" },
+        { "type": "custom", "format": "╰────────────────────────────────────────╯" },
+        "break",
+        { "type": "colors", "symbol": "block" }
+    ]
+}

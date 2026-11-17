@@ -1,0 +1,30 @@
+configuration {
+    modi: "drun,run,window";
+    show-icons: true;
+    display-drun: "";
+    drun-display-format: "{name}";
+}
+
+@import "colors.rasi"
+
+* {
+    font: "JetBrainsMono Nerd Font 11";
+    background-color: transparent;
+    text-color: @fg;
+}
+
+window {
+    width: 480px;
+    background-color: @bg;
+    border: 2px;
+    border-color: @accent;
+    border-radius: 0;
+    padding: 14px;
+}
+
+inputbar { padding: 8px; border: 0 0 1px 0; border-color: @muted; children: [prompt, entry]; spacing: 10px; }
+prompt { text-color: @accent; }
+listview { lines: 8; padding: 8px 0 0 0; }
+element { padding: 6px 8px; border-radius: 0; }
+element selected { background-color: @accent; text-color: @bg; }
+element-text { text-color: inherit; }

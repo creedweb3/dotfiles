@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Fetch manga pages from the MangaDex API for the manga lock screen, one set per preset.
+
+For each preset's series it picks random English chapters hosted on MangaDex (falling back to any language when a
+series has none), downloads pages from the middle of each chapter (skipping credit pages) in full quality (resized
+to 1400px tall) into <store>/<preset>/, and reads each page with OCR (tesseract): a page showing a site link or a
+scanlator tag is thrown away and replaced, and so is a page with soft areas (airbrushed colour art, blurred
+backgrounds) that would look out of focus in grey. Without tesseract the watermark check is skipped.
+Each page is also cut into its own manga panels along the white gutters (<store>/<preset>/NN_K.jpg), so a lock
+frame can show a single real panel.
+
+The store is $RICE_MANGA_DIR, else $XDG_CACHE_HOME/rice/manga (~/.cache/rice/manga). It holds
+<store>/pages.json: {preset: [{panels, score, file, chapter, lang, source}]}, paths relative to the store's parent.
+A preset is fetched into a staging folder and swapped in at the end, so a failed fetch keeps the old frames.
+
+Output for a UI: "progress: <preset> <got>/<want>" lines while working, and a last line
+"done: <n> pages for <preset>[, ...]" (exit 0) or "error: <reason>" (exit 1).
+
+Usage: manga-frames [pages per preset] [preset]   (default 36, every preset)
+       manga-frames panels                       (re-cut the pages already downloaded)
+"""
+import concurrent.futures, io, json, os, pathlib, platform, random, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
+from PIL import Image, ImageFilter, ImageStat
+
+API = "https://api.mangadex.org"
+UA = {"User-Agent": "anime-rice/0.1 (personal desktop theme)"}
+OUT = pathlib.Path(os.environ.get("RICE_MANGA_DIR") or pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache") / "rice" / "manga")
+# the official colour editions: the main entries host almost no English chapters (licensing), these host hundreds;
+# the lock shows them in grey, so they look like the printed pages
+SERIES = {"bleach": "a460ab18-22c1-47eb-a08a-9ee85fe37ec8", "naruto": "a787b10a-02d0-46c0-8236-0d01d69ad4a3",
+          "onepiece": "a2c1d849-af05-4bbc-b2a7-866ebb10331f"}
+# fight-heavy chapters (only the ranges MangaDex hosts in English): Bleach Thousand-Year Blood War, Naruto vs Zabuza,
+# One Piece Enies Lobby / Marineford / Dressrosa. Falls back to every chapter if a range yields too few.
+FIGHTS = {"bleach": [(480, 686)], "naruto": [(10, 33)], "onepiece": [(380, 430), (550, 580), (700, 800)]}
+# text that marks a watermark: web addresses, social / donation links, scanlation credits
+MARK = re.compile(r"www|https?|\.(com|net|org|br|io|xyz|gg|to|me|co|tv|info)\b|discord|patreon|ko-?fi|twitter|facebook|scan(s|lation|lator)?\b|reader|raw", re.I)
+DEFAULT_PAGES = 36
+
+
+def installed_presets():
+    """Preset names from a presets/ folder (the repo beside this script, or an installed share dir); None if none found."""
+    here = pathlib.Path(__file__).resolve().parent
+    for d in (here.parent / "presets", pathlib.Path("/usr/local/share/rice/presets"), pathlib.Path("/usr/share/rice/presets")):
+        if d.is_dir():
+            return {p.name for p in d.iterdir() if p.is_dir()}
+    return None
+
+
+def presets():
+    """The presets to fetch: every series we know, limited to the presets installed when that can be told."""
+    found = installed_presets()
+    return [p for p in SERIES if found is None or p in found]
+
+
+def get(path, **q):
+    url = API + path + ("?" + urllib.parse.urlencode(q, doseq=True) if q else "")
+    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
+        time.sleep(0.35)  # stay well under the API rate limits
+        return json.load(r)
+
+
+def chapters(mid, lang):
+    out, off, extra = [], 0, {"translatedLanguage[]": [lang]} if lang else {}
+    while off < 500:
+        d = get(f"/manga/{mid}/feed", limit=100, offset=off, includeExternalUrl=0, includeEmptyPages=0, **{"contentRating[]": ["safe", "suggestive"]}, **extra)
+        out += [c for c in d["data"] if (c["attributes"].get("pages") or 0) >= 10]
+        off += 100
+        if off >= d["total"]:
+            break
+    return out
+
+
+def sharp(img):
+    """True when every part of the page has real line work (manga ink), not soft painted gradients."""
+    g = img.convert("L"); w, h = g.size
+    for box in [(0, 0, w, h * .4), (w * .2, h * .25, w * .8, h * .75), (0, h * .6, w, h)]:
+        c = g.crop(tuple(map(int, box))); c = c.resize((400, max(1, int(400 * c.height / c.width))))
+        if ImageStat.Stat(c.filter(ImageFilter.FIND_EDGES)).mean[0] < 12:
+            return False
+    return True
+
+
+def cut_panels(img):
+    """Split a page into its panels: recursively cut along full-width / full-height runs of white (the gutters)."""
+    s = 2; g = img.convert("L").resize((img.width // s, img.height // s)); W, H = g.size; px = g.tobytes()
+    def dark_row(y, x0, x1): return sum(1 for b in px[y * W + x0:y * W + x1] if b < 200) > (x1 - x0) * 0.01
+    def dark_col(x, y0, y1): return sum(1 for y in range(y0, y1) if px[y * W + x] < 200) > (y1 - y0) * 0.01
+    def runs(flags):  # stretches of dark lines between white gutters (gutters must be at least 3px)
+        out, start, gap = [], None, 0
+        for i, d in enumerate(flags):
+            if d:
+                if start is None: start = i
+                gap = 0
+            elif start is not None:
+                gap += 1
+                if gap >= 3: out.append((start, i - gap + 1)); start, gap = None, 0
+        if start is not None: out.append((start, len(flags) - gap))
+        return out
+    boxes = []
+    def rec(x0, y0, x1, y1, depth):
+        rows = runs([dark_row(y, x0, x1) for y in range(y0, y1)])
+        if len(rows) > 1 and depth < 6:
+            for a, b in rows: rec(x0, y0 + a, x1, y0 + b, depth + 1)
+            return
+        if rows: y0, y1 = y0 + rows[0][0], y0 + rows[0][1]
+        cols = runs([dark_col(x, y0, y1) for x in range(x0, x1)])
+        if len(cols) > 1 and depth < 6:
+            for a, b in cols: rec(x0 + a, y0, x0 + b, y1, depth + 1)
+            return
+        if cols: x0, x1 = x0 + cols[0][0], x0 + cols[0][1]
+        if x1 - x0 >= W * 0.22 and y1 - y0 >= H * 0.10:
+            boxes.append((x0 * s, y0 * s, x1 * s, y1 * s))
+    rec(0, 0, W, H, 0)
+    return boxes
+
+
+def action_score(img):
+    """Higher for fight-looking panels: dense ink and speed lines, little white speech-bubble space."""
+    g = img.convert("L"); g = g.resize((300, max(1, int(300 * g.height / g.width))))
+    edges = ImageStat.Stat(g.filter(ImageFilter.FIND_EDGES)).mean[0]
+    hist = g.histogram(); white = sum(hist[236:]) / max(1, sum(hist))
+    return round(edges * (1 - 0.8 * white), 2)
+
+
+def save_panels(folder, name):
+    img = Image.open(folder / name); out = []
+    for k, b in enumerate(cut_panels(img)):
+        pn = f"{name[:-4]}_{k}.jpg"; c = img.crop(b); c.save(folder / pn, quality=90); out.append((pn, action_score(c)))
+    return out
+
+
+def chapter_pages(ch):
+    """Download up to two sharp pages from the middle of one chapter; [] when the chapter fails."""
+    try:  # a chapter can vanish or a page fail to load: skip it
+        srv = get(f"/at-home/server/{ch['id']}")
+        files = srv["chapter"]["data"]
+        if not str(srv["baseUrl"]).startswith("https://"):   # urllib would also open file:// and ftp://
+            return []
+        out = []
+        for f in random.sample(files[3:-2] or files, k=min(2, len(files))):
+            url = f"{srv['baseUrl']}/data/{srv['chapter']['hash']}/{f}"
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=40) as r:
+                out.append(Image.open(io.BytesIO(r.read())).convert("RGB"))
+        return out
+    except Exception:   # also http.client.IncompleteRead, PIL's DecompressionBombError, TypeError on odd JSON
+        return []
+
+
+def ocr(paths):
+    """{file name: text} for each page; {} when no OCR tool is installed (the watermark check is then skipped).
+    On Windows (the demo's dev box) $RICE_OCR_PS1 can point at a script using the built-in OCR engine."""
+    if not paths:
+        return {}
+    if shutil.which("tesseract"):
+        out = {}
+        for p in paths:
+            r = subprocess.run(["tesseract", str(p), "stdout"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+            out[pathlib.Path(p).name] = r.stdout
+        return out
+    ps1 = os.environ.get("RICE_OCR_PS1")
+    if platform.system() != "Windows" or not ps1:
+        print("tesseract not found: watermark check skipped (pacman -S tesseract tesseract-data-eng)", file=sys.stderr)
+        return {}
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1, *map(str, paths)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+    try:
+        return {pathlib.Path(k).name: v for k, v in json.loads(r.stdout or "{}").items()}
+    except ValueError:
+        return {}
+
+
+def fetch_preset(preset, want):
+    """Fetch one preset into a staging folder, swap it in, and return its manifest entries."""
+    final, stage = OUT / preset, OUT / f".{preset}.new"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    mid = SERIES[preset]
+    chs = chapters(mid, "en") or chapters(mid, None)
+    num = lambda c: float(c["attributes"]["chapter"]) if (c["attributes"].get("chapter") or "").replace(".", "", 1).isdigit() else -1
+    fight = [c for c in chs if any(a <= num(c) <= b for a, b in FIGHTS.get(preset, []))]
+    if len(fight) >= want // 2:
+        chs = fight
+    random.shuffle(chs)
+    pages, dropped, soft, n = [], 0, 0, 0
+    while len(pages) < want and chs:
+        take = []
+        while len(take) * 2 < (want - len(pages)) * 1.5 and chs:
+            take.append(chs.pop())
+        # a few chapters at once: the image servers have no tight limit, the at-home lookup allows 40 a minute
+        with concurrent.futures.ThreadPoolExecutor(4) as pool:
+            got = list(pool.map(chapter_pages, take))
+        batch = []  # save the batch, then OCR it in one go
+        for ch, imgs in zip(take, got):
+            for img in imgs:
+                if not sharp(img):
+                    soft += 1
+                    continue
+                if img.height > 1400:
+                    img = img.resize((int(img.width * 1400 / img.height), 1400), Image.LANCZOS)
+                name = f"{n:02d}.jpg"; n += 1
+                img.save(stage / name, quality=90)
+                batch.append((name, ch))
+        text = ocr([stage / b[0] for b in batch])
+        for name, ch in batch:
+            bad = MARK.search(text.get(name, ""))
+            if len(pages) >= want or bad:
+                (stage / name).unlink(); dropped += bool(bad)   # only count real watermark hits
+                continue
+            cut = save_panels(stage, name)
+            pages.append({"panels": [f"manga/{preset}/{p}" for p, _ in cut], "score": [s for _, s in cut], "file": f"manga/{preset}/{name}", "chapter": ch["attributes"].get("chapter"),
+                          "lang": ch["attributes"].get("translatedLanguage"), "source": f"https://mangadex.org/chapter/{ch['id']}"})
+        print(f"progress: {preset} {len(pages)}/{want}", flush=True)
+    if not pages:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise RuntimeError(f"no usable pages for {preset}; the old frames are kept")
+    shutil.rmtree(final, ignore_errors=True)
+    stage.rename(final)
+    langs = sorted({str(x["lang"]) for x in pages})
+    print(f"{preset}: {len(pages)} pages ({', '.join(langs)}), {dropped} dropped by the watermark check, {soft} for soft art", file=sys.stderr)
+    return pages
+
+
+def write_manifest(manifest):
+    tmp = OUT / "pages.json.new"
+    tmp.write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+    os.replace(tmp, OUT / "pages.json")
+
+
+def fetch(want, only=None):
+    OUT.mkdir(parents=True, exist_ok=True)
+    old = OUT / "pages.json"
+    manifest = json.loads(old.read_text(encoding="utf-8")) if old.exists() else {}   # keep the other presets when fetching one
+    done = []
+    for preset in presets():
+        if only and preset != only:
+            continue
+        manifest[preset] = fetch_preset(preset, want)
+        write_manifest(manifest)
+        done.append(f"{len(manifest[preset])} pages for {preset}")
+    print("done: " + ", ".join(done), flush=True)
+
+
+def recut():
+    manifest = json.loads((OUT / "pages.json").read_text(encoding="utf-8"))
+    done = []
+    for preset, pages in manifest.items():
+        folder = OUT / preset
+        for old in folder.glob("*_*.jpg"):
+            old.unlink()
+        for pg in pages:
+            cut = save_panels(folder, pathlib.Path(pg["file"]).name)
+            pg["panels"], pg["score"] = [f"manga/{preset}/{p}" for p, _ in cut], [s for _, s in cut]
+        done.append(f"{sum(len(p['panels']) for p in pages)} panels from {len(pages)} pages for {preset}")
+    write_manifest(manifest)
+    print("done: " + ", ".join(done), flush=True)
+
+
+def main(argv):
+    if argv[:1] == ["panels"]:
+        return recut()
+    if argv[:1] in (["-h"], ["--help"]):
+        print(__doc__); return
+    want = int(argv[0]) if argv and argv[0].isdigit() else DEFAULT_PAGES
+    only = argv[1] if len(argv) > 1 else None
+    if only and only not in presets():
+        raise ValueError(f"unknown preset {only!r} (known: {', '.join(presets())})")
+    fetch(want, only)
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except Exception as e:  # one readable last line for the settings page; details stay on stderr
+        print(f"error: {e}", flush=True)
+        sys.exit(1)

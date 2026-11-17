@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""Draw the boot screens from the current wallpaper and install them.
+
+    sudo boot-theme                  GRUB menu, Plymouth splash and disk password, SDDM login screen
+    sudo boot-theme --size 2560x1440 draw for this screen size (default: the connected monitor)
+    boot-theme --render DIR          only draw the theme files into DIR (no root needed)
+
+The look matches the desktop: the wallpaper blurred and darkened, the preset
+symbol in the accent, boxed menu entries with the chosen one outlined in the
+accent, and a thin countdown line. GRUB and Plymouth load their images from
+/boot and the initramfs, and SDDM runs before you log in, so none of them can
+follow the wallpaper live: run this again after changing the wallpaper.
+"""
+import argparse, glob, importlib.util, json, os, pwd, re, shutil, struct, subprocess, sys, tempfile
+from importlib.machinery import SourceFileLoader
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+GRUB_DIR, PLY_DIR = "/boot/grub/themes/rice", "/usr/share/plymouth/themes/rice"
+SDDM_DIR, SDDM_CONF = "/usr/share/sddm/themes/rice", "/etc/sddm.conf.d/rice.conf"
+# where the SDDM theme's QML lives: the repo when run from it, else where install.sh puts it
+SDDM_SRC = [os.path.join(HERE, "..", "sddm"), "/usr/local/share/rice/sddm"]
+# the manga page's layout code, panel and ink shader, shared with the Quickshell lock screen
+LOCK_SRC = [os.path.join(HERE, "..", "quickshell", "lock"), "/usr/local/share/rice/sddm"]
+LOCK_FILES = ("Manga.js", "InkPanel.qml", "ink.frag")
+MAX_FRAMES = 80    # the most panels a page can have (Settings > Lock screen's frame count)
+# The lock screen prefs the login page uses, as quickshell/common/Prefs.qml: [default, allowed values]
+LOCK_PREFS = {
+    "mpg": ["grid", ["random", "grid", "slant", "diagonal", "shatter", "cutoff"]],
+    "mfr": [56, [6, 8, 10, 12, 18, 24, 32, 40, 48, 56, 64, 72, 80]],
+    "mpick": ["action", ["action", "any"]],
+    "mink": ["night", ["mono", "accent", "duo", "spot", "riso", "night", "gutter", "colour"]],
+    "macc": ["time", ["full", "soft", "borders", "panels", "time"]],
+    "mday": ["mix", ["tag", "plain", "rule", "kanji", "mix"]],
+    "mdt": ["long", ["long", "short", "num", "iso"]],
+    "mlsym": ["off", ["on", "off"]],
+    "mlday": ["on", ["on", "off"]],
+    "mldate": ["on", ["on", "off"]],
+}
+DEMO_H = 858       # the demo's desktop height; every size below is in demo pixels, scaled to the screen
+ENTRIES = 4        # menu rows shown before it scrolls (Arch, fallback, Windows, UEFI settings)
+GLYPHS = "0x20-0x7E,0xA0-0xFF,0x2022-0x2022,0x2190-0x21FF,0x2500-0x259F"  # keeps the GRUB fonts small; grub-mkfont wants every entry as a range
+
+
+# ---------- colours ----------
+def rgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def mix(a, b, t):
+    """a over b at strength t (like color-mix(a t, b)), as #rrggbb."""
+    return "#%02x%02x%02x" % tuple(round(x * t + y * (1 - t)) for x, y in zip(rgb(a), rgb(b)))
+
+
+def rgba(h, alpha):
+    return rgb(h) + (round(alpha * 255),)
+
+
+# ---------- inputs ----------
+def user_home():
+    name = os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
+    return pwd.getpwnam(name).pw_dir
+
+
+def screen_size():
+    for status in sorted(glob.glob("/sys/class/drm/card*-*/status")):
+        if open(status).read().strip() == "connected":
+            modes = open(os.path.join(os.path.dirname(status), "modes")).read().split()
+            if modes:
+                w, h = modes[0].split("x")
+                return int(w), int(h)
+    return 1920, 1080
+
+
+def inside(path, root, trusted):
+    """The resolved path when path (after following links) is a file inside root and inside one of
+    the trusted dirs, else None. root itself may be a user-made link, so trusted (the user's home and
+    the installed rice share) bounds it too: a user-made pages.json or link must not make this root
+    process copy other files into the world-readable login theme. Callers open the resolved path."""
+    path, root = os.path.realpath(path), os.path.realpath(root)
+    if not os.path.isfile(path) or os.path.commonpath([path, root]) != root:
+        return None
+    return path if any(os.path.commonpath([path, t]) == t for t in trusted) else None
+
+
+def lock_inputs(home):
+    """What the login page needs from the user's lock screen, which SDDM (running as the sddm user)
+    cannot read itself: the lock prefs, the active preset, and the images for the panels (the
+    manga frames from `manga-frames`, else the preset's wallpapers)."""
+    try:
+        with open(os.path.join(home, ".config/rice/prefs.json")) as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    prefs = {k: (raw[k] if raw.get(k) in ok else d) for k, (d, ok) in LOCK_PREFS.items()}
+    # the active preset: the one wallust's symbol template links to (presets/<name>/symbol.svg)
+    sym = os.path.realpath(os.path.join(home, ".config/wallust/templates/symbol.svg"))
+    preset_dir = os.path.dirname(sym)
+    preset = os.path.basename(preset_dir) if os.path.isfile(sym) else ""
+    store = os.path.join(home, ".cache/rice/manga")
+    trusted = [os.path.realpath(home), "/usr/local/share/rice"]
+    try:
+        with open(os.path.join(store, "pages.json")) as f:
+            pages = json.load(f).get(preset) or []
+    except (OSError, ValueError, AttributeError):
+        pages = []
+    pages = [x for x in pages if isinstance(x, dict)] if isinstance(pages, list) else []
+    # as Manga.framePaths: every panel crop with its fight score, best first; "action" keeps the top ~45%
+    frames = []
+    for x in pages:
+        panels, score = x.get("panels"), x.get("score") or []
+        if isinstance(panels, list) and panels:
+            frames += [(f, score[i] if i < len(score) and isinstance(score[i], (int, float)) else 0)
+                       for i, f in enumerate(panels) if isinstance(f, str)]
+        elif isinstance(x.get("file"), str):
+            frames.append((x["file"], 0))
+    frames.sort(key=lambda f: -f[1])
+    if prefs["mpick"] == "action":
+        frames = frames[:max(12, -(-len(frames) * 45 // 100))]
+    images = [r for r in (inside(os.path.join(store, re.sub(r"^manga/", "", f)), store, trusted) for f, _ in frames) if r]
+    has_frames = bool(images)
+    if not images and preset:
+        walls = os.path.join(preset_dir, "wallpapers")
+        images = sorted(r for r in (inside(p, walls, trusted) for p in glob.glob(os.path.join(walls, "*"))
+                                    if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))) if r)
+    return {"prefs": prefs, "images": images, "frames": has_frames}
+
+
+def find_font(bold=False):
+    if os.environ.get("RICE_FONT"):  # override, e.g. for testing off Arch
+        return os.environ.get("RICE_FONT_BOLD", os.environ["RICE_FONT"]) if bold else os.environ["RICE_FONT"]
+    style = "Bold" if bold else "Regular"
+    for pat in (f"/usr/share/fonts/TTF/JetBrainsMonoNerdFont-{style}.ttf", f"/usr/share/fonts/**/JetBrainsMono*-{style}.ttf"):
+        hits = glob.glob(pat, recursive=True)
+        if hits:
+            return hits[0]
+    sys.exit("JetBrains Mono not found (install ttf-jetbrains-mono-nerd)")
+
+
+def raster_svg(svg_text, height, out):
+    """The symbol as a PNG of the given height (rsvg-convert, from librsvg).
+    Fed on stdin: with no file name there is no base folder, so a user-made SVG
+    cannot pull other files into the image while this runs as root."""
+    subprocess.run(["rsvg-convert", "-h", str(height), "-o", out], input=svg_text.encode(), check=True)
+
+
+# ---------- drawing ----------
+def ellipse_mask(size, centre, radii, curve, outside):
+    """Alpha mask of a radial gradient: curve(d) for distance d (0 centre, 1 edge), `outside` beyond."""
+    grad = Image.radial_gradient("L").resize((max(1, round(2 * radii[0])), max(1, round(2 * radii[1]))))
+    # Pillow's radial gradient reads 181 at the middle of each edge (255 only in the corners)
+    grad = grad.point([round(255 * curve(min(1, v / 181))) for v in range(256)])
+    m = Image.new("L", size, round(255 * outside))
+    m.paste(grad, (round(centre[0] - radii[0]), round(centre[1] - radii[1])))
+    return m
+
+
+def background(wall, size, s, bg):
+    """The wallpaper blurred and darkened toward the middle, like the demo's boot screen."""
+    W, H = size
+    pad = round(40 * s)
+    im = Image.open(wall).convert("RGB")
+    k = max((W + 2 * pad) / im.width, (H + 2 * pad) / im.height)
+    im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+    x = (im.width - W - 2 * pad) // 2
+    y = round((im.height - H - 2 * pad) * .35)          # background-position: center 35%
+    im = im.crop((x, y, x + W + 2 * pad, y + H + 2 * pad)).filter(ImageFilter.GaussianBlur(24 * s))
+    im = ImageEnhance.Color(im).enhance(1.1).crop((pad, pad, pad + W, pad + H)).convert("RGBA")
+    lerp = lambda a, b, t: a + (b - a) * t
+    shade = Image.new("RGBA", size, rgb(bg) + (0,))
+    layers = [  # bottom to top, as in the demo's CSS
+        Image.new("L", size, round(255 * .5)),
+        ellipse_mask(size, (W * .5, H * .48), (W * .46, H * .62),
+                     lambda d: lerp(.88, .70, d / .45) if d < .45 else lerp(.70, 0, (d - .45) / .55), 0),
+        ellipse_mask(size, (W * .5, H * .5), (W * .85, H * .85),
+                     lambda d: 0 if d < .55 else lerp(0, .70, (d - .55) / .45), .70),
+    ]
+    for m in layers:
+        shade.putalpha(m)
+        im = Image.alpha_composite(im, shade)
+    return im.convert("RGB")
+
+
+def nine_slice(out_dir, prefix, w_slice, edge, fill):
+    """GRUB pixmap style: prefix_{nw,n,ne,w,c,e,sw,s,se}.png. w_slice is the left column (1 px wide or more)."""
+    one = lambda c: Image.new("RGBA", (1, 1), c)
+    for name, im in {"nw": one(edge), "n": one(edge), "ne": one(edge), "e": one(edge),
+                     "sw": one(edge), "s": one(edge), "se": one(edge), "c": one(fill), "w": w_slice}.items():
+        im.save(os.path.join(out_dir, f"{prefix}_{name}.png"))
+
+
+def spaced(draw, xy, text, font, fill, spacing):
+    x, y = xy
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        x += draw.textlength(ch, font=font) + spacing
+
+
+def spaced_width(draw, text, font, spacing):
+    return sum(draw.textlength(ch, font=font) for ch in text) + spacing * (len(text) - 1)
+
+
+# ---------- GRUB ----------
+def pf2_name(path):
+    """The font name GRUB knows a .pf2 by (its NAME section)."""
+    data = open(path, "rb").read()
+    i = 12  # after "FILE", length, "PFF2"
+    while i < len(data):
+        sid, n = data[i:i + 4], struct.unpack(">I", data[i + 4:i + 8])[0]
+        if sid == b"NAME":
+            return data[i + 8:i + 8 + n].rstrip(b"\0").decode()
+        i += 8 + n
+    raise ValueError(f"no NAME in {path}")
+
+
+def grub_fonts(out_dir, s):
+    fonts = {}
+    for key, bold, px in (("item", False, 16), ("sel", True, 16), ("foot", False, 12)):
+        out = os.path.join(out_dir, f"{key}.pf2")
+        subprocess.run(["grub-mkfont", "-s", str(round(px * s)), "-r", GLYPHS, "-o", out, find_font(bold)], check=True)
+        fonts[key] = pf2_name(out)
+    return fonts
+
+
+def grub_theme(out_dir, p, size, s, sym_png, fonts):
+    W, H = size
+    S = lambda v: max(1, round(v * s))
+    bg, fg, acc = p["bg"], p["fg"], p["accent"]
+    line = mix(fg, bg, .14)
+    # entry boxes: thin border, dark see-through fill; the chosen one gets the accent border,
+    # an accent tint and an accent bar where the demo draws its ▌
+    edge, fill = rgba(fg, .14), rgba(bg, .55)
+    left = S(22)
+    w_item = Image.new("RGBA", (left, 1), fill)
+    w_item.putpixel((0, 0), edge)
+    sel_fill = rgba(mix(acc, bg, .22), .85)
+    w_sel = Image.new("RGBA", (left, 1), sel_fill)
+    for x in [0, *range(S(14), S(14) + S(3))]:
+        w_sel.putpixel((x, 0), rgba(acc, 1))
+    nine_slice(out_dir, "item", w_item, edge, fill)
+    nine_slice(out_dir, "sel", w_sel, rgba(acc, 1), sel_fill)
+
+    sym_h, menu_w, row, gap = S(60), S(420), S(38), S(6)
+    menu_h = ENTRIES * row + (ENTRIES - 1) * gap
+    total = sym_h + S(38) + menu_h + S(22) + S(15) + S(10) + S(2)
+    top = (H - total) // 2
+    sym_w = Image.open(sym_png).width
+    menu_top = top + sym_h + S(38)
+    foot_top = menu_top + menu_h + S(22)
+    x0 = (W - menu_w) // 2
+    foot = mix(fg, bg, .70)
+    theme = f"""# Generated by boot-theme from the current wallpaper; run it again to redraw.
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "{bg}"
+terminal-font: "{fonts['item']}"
+terminal-box: "item_*.png"
+
++ image {{ left = {(W - sym_w) // 2} top = {top} file = "symbol.png" }}
+
++ boot_menu {{
+    left = {x0} top = {menu_top} width = {menu_w} height = {menu_h + 2}
+    item_height = {row - 2} item_spacing = {gap + 2} item_padding = 0
+    icon_width = 0 icon_height = 0 item_icon_space = {S(8)}
+    item_font = "{fonts['item']}" selected_item_font = "{fonts['sel']}"
+    item_color = "{mix(fg, bg, .88)}" selected_item_color = "{fg}"
+    item_pixmap_style = "item_*.png" selected_item_pixmap_style = "sel_*.png"
+    scrollbar = false
+}}
+
++ label {{ id = "__timeout__" left = {x0} top = {foot_top} width = {menu_w} height = {S(15)}
+    text = "starting in %d" align = "left" font = "{fonts['foot']}" color = "{foot}" }}
++ label {{ left = {x0} top = {foot_top} width = {menu_w} height = {S(15)}
+    text = "↑↓ · enter · e edit" align = "right" font = "{fonts['foot']}" color = "{foot}" }}
++ progress_bar {{ id = "__timeout__" left = {x0} top = {foot_top + S(15) + S(10)} width = {menu_w} height = {S(2)}
+    fg_color = "{acc}" bg_color = "{line}" border_color = "{line}" text = "" }}
+"""
+    open(os.path.join(out_dir, "theme.txt"), "w", encoding="utf-8", newline="\n").write(theme)
+
+
+# ---------- Plymouth ----------
+def password_card(out, p, s):
+    """The disk-password card, drawn like the desktop's admin password popup. Returns where things sit on it."""
+    S = lambda v: max(1, round(v * s))
+    bg, fg, acc = p["bg"], p["fg"], p["accent"]
+    w, padx, pady = S(420), S(28), S(26)
+    lbl_f = ImageFont.truetype(find_font(), S(11))
+    msg_f = ImageFont.truetype(find_font(), S(13))
+    go_f = ImageFont.truetype(find_font(), S(22))
+    sym_h, field_h = S(40), S(38)
+    h = pady + sym_h + S(14) + S(14) + S(14) + S(17) + S(14) + field_h + pady
+    card = Image.new("RGBA", (w, h), rgba(bg, .92))
+    d = ImageDraw.Draw(card)
+    d.rectangle((0, 0, w - 1, h - 1), outline=rgba(p["muted"], 1))
+    y = pady + sym_h + S(14)
+    label = "DISK PASSWORD"
+    spaced(d, ((w - spaced_width(d, label, lbl_f, S(3))) / 2, y), label, lbl_f, rgba(mix(fg, bg, .70), 1), S(3))
+    y += S(14) + S(14)
+    msg = "enter the passphrase to unlock the disk"
+    d.text(((w - d.textlength(msg, font=msg_f)) / 2, y), msg, font=msg_f, fill=rgba(mix(fg, bg, .85), 1))
+    y += S(17) + S(14)
+    box = (padx, y, w - padx - 1, y + field_h - 1)
+    d.rectangle(box, fill=rgba(bg, .55), outline=rgba(acc, 1))
+    d.text((box[2] - S(12) - d.textlength("›", font=go_f), y + field_h / 2), "›", font=go_f, fill=rgba(acc, 1), anchor="lm")
+    card.save(out)
+    return {"sym_top": pady, "sym_h": sym_h, "field_x": box[0] + S(12), "field_y": y, "field_h": field_h,
+            "dot_step": S(14), "max_dots": (box[2] - S(36) - box[0] - S(12)) // S(14)}
+
+
+def plymouth_theme(out_dir, p, size, s, card):
+    H = size[1]
+    S = lambda v: max(1, round(v * s))
+    acc, line = p["accent"], mix(p["fg"], p["bg"], .14)
+    Image.new("RGB", (1, 1), rgb(line)).save(os.path.join(out_dir, "track.png"))
+    Image.new("RGB", (1, 1), rgb(acc)).save(os.path.join(out_dir, "fill.png"))
+    Image.new("RGB", (S(8), S(8)), rgb(acc)).save(os.path.join(out_dir, "dot.png"))
+    Image.new("RGB", (S(2), S(18)), rgb(acc)).save(os.path.join(out_dir, "caret.png"))
+    r, g, b = (c / 255 for c in rgb(p["bg"]))
+    open(os.path.join(out_dir, "rice.plymouth"), "w", newline="\n").write(f"""[Plymouth Theme]
+Name=rice
+Description=Wallpaper-coloured splash and disk password (generated by boot-theme)
+ModuleName=script
+
+[script]
+ImageDir={PLY_DIR}
+ScriptFile={PLY_DIR}/rice.script
+""")
+    c = card
+    script = f"""// Generated by boot-theme. Sizes were drawn for a {H} px tall screen; k rescales them.
+Window.SetBackgroundTopColor({r:.3f}, {g:.3f}, {b:.3f});
+Window.SetBackgroundBottomColor({r:.3f}, {g:.3f}, {b:.3f});
+W = Window.GetWidth(); H = Window.GetHeight(); k = H / {H};
+
+bg = Sprite(Image("background.png").Scale(W, H)); bg.SetZ(-100);
+
+// splash: the symbol with a thin line under it that fills as the boot goes on
+sym_img = Image("symbol.png"); sym_img = sym_img.Scale(sym_img.GetWidth() * k, sym_img.GetHeight() * k);
+bar_w = {S(220)} * k; bar_h = Math.Max(1, {S(2)} * k);
+top = H / 2 - (sym_img.GetHeight() + {S(46)} * k + bar_h) / 2;
+sym = Sprite(sym_img); sym.SetPosition(W / 2 - sym_img.GetWidth() / 2, top, 1);
+track = Sprite(Image("track.png").Scale(bar_w, bar_h));
+track.SetPosition(W / 2 - bar_w / 2, top + sym_img.GetHeight() + {S(46)} * k, 1);
+fill_img = Image("fill.png"); fill = Sprite(); fill.SetPosition(track.GetX(), track.GetY(), 2);
+
+fun progress_cb(duration, progress) {{
+    w = Math.Int(bar_w * progress);
+    if (w < 1) w = 1;
+    fill.SetImage(fill_img.Scale(w, bar_h));
+}}
+Plymouth.SetBootProgressFunction(progress_cb);
+
+// disk password: the card from the desktop's password popup, one square per typed character
+card_img = Image("card.png"); card_img = card_img.Scale(card_img.GetWidth() * k, card_img.GetHeight() * k);
+cx = W / 2 - card_img.GetWidth() / 2; cy = H / 2 - card_img.GetHeight() / 2;
+card = Sprite(card_img); card.SetPosition(cx, cy, 10); card.SetOpacity(0);
+csym_img = Image("symbol.png");
+csym_img = csym_img.Scale(csym_img.GetWidth() * {c['sym_h']} / csym_img.GetHeight() * k, {c['sym_h']} * k);
+csym = Sprite(csym_img); csym.SetPosition(W / 2 - csym_img.GetWidth() / 2, cy + {c['sym_top']} * k, 11); csym.SetOpacity(0);
+dot_img = Image("dot.png"); dot_img = dot_img.Scale(dot_img.GetWidth() * k, dot_img.GetHeight() * k);
+caret_img = Image("caret.png"); caret_img = caret_img.Scale(caret_img.GetWidth() * k, caret_img.GetHeight() * k);
+field_x = cx + {c['field_x']} * k; field_mid = cy + {c['field_y']} * k + {c['field_h']} * k / 2;
+for (i = 0; i < {c['max_dots']}; i++) {{
+    dots[i] = Sprite(dot_img);
+    dots[i].SetPosition(field_x + i * {c['dot_step']} * k, field_mid - dot_img.GetHeight() / 2, 11);
+    dots[i].SetOpacity(0);
+}}
+caret = Sprite(caret_img); caret.SetOpacity(0);
+
+fun splash(on) {{ sym.SetOpacity(on); track.SetOpacity(on); fill.SetOpacity(on); }}
+fun card_show(on) {{
+    card.SetOpacity(on); csym.SetOpacity(on);
+    if (!on) {{ caret.SetOpacity(0); for (i = 0; i < {c['max_dots']}; i++) dots[i].SetOpacity(0); }}
+}}
+
+fun password_cb(prompt, bullets) {{
+    splash(0); card_show(1);
+    n = Math.Min(bullets, {c['max_dots']});
+    for (i = 0; i < {c['max_dots']}; i++) dots[i].SetOpacity(i < n);
+    caret.SetPosition(field_x + n * {c['dot_step']} * k, field_mid - caret_img.GetHeight() / 2, 11);
+    caret.SetOpacity(1);
+}}
+fun normal_cb() {{ card_show(0); splash(1); }}
+Plymouth.SetDisplayPasswordFunction(password_cb);
+Plymouth.SetDisplayNormalFunction(normal_cb);
+"""
+    open(os.path.join(out_dir, "rice.script"), "w", newline="\n").write(script)
+
+
+# ---------- SDDM ----------
+def sddm_theme(out_dir, p, bg_png, sym_png, wall, lock=None):
+    """The login screen: the lock screen's manga page (the repo's QML and the lock's layout code),
+    the panel images, the symbol, and the colours and lock prefs, all next to Main.qml."""
+    lock = lock or {"prefs": {k: d for k, (d, _) in LOCK_PREFS.items()}, "images": [], "frames": False}
+    src = next((d for d in SDDM_SRC if os.path.isfile(os.path.join(d, "Main.qml"))), None)
+    if src:
+        for name in ("Main.qml", "metadata.desktop"):
+            shutil.copy(os.path.join(src, name), out_dir)
+    lsrc = next((d for d in LOCK_SRC if all(os.path.isfile(os.path.join(d, n)) for n in LOCK_FILES)), None)
+    if lsrc:
+        for name in LOCK_FILES:
+            shutil.copy(os.path.join(lsrc, name), out_dir)
+        ink_shader(os.path.join(out_dir, "ink.frag"), os.path.join(out_dir, "ink.frag.qsb"))
+    else:
+        print("  login screen: the lock's Manga.js / InkPanel.qml not found (run install.sh again)")
+    shutil.copy(bg_png, os.path.join(out_dir, "background.png"))
+    shutil.copy(sym_png, os.path.join(out_dir, "symbol.png"))
+    # the panel images, re-encoded as plain JPEG (the greeter may lack the webp plugin)
+    fdir = os.path.join(out_dir, "frames")
+    os.makedirs(fdir, exist_ok=True)
+    count = 0
+    for path in (lock["images"] or [wall])[:MAX_FRAMES]:
+        try:
+            with Image.open(path) as im:
+                im = im.convert("RGB")
+                im.thumbnail((1600, 1600) if lock["frames"] else (2560, 2560))
+                im.save(os.path.join(fdir, f"{count}.jpg"), quality=85)
+            count += 1
+        except (OSError, ValueError, Image.DecompressionBombError) as e:
+            print(f"  login screen: skipped {path} ({e})")
+    prefs = "".join(f"{k}={v}\n" for k, v in lock["prefs"].items())
+    shader = "ink.frag.qsb" if os.path.isfile(os.path.join(out_dir, "ink.frag.qsb")) else ""
+    open(os.path.join(out_dir, "theme.conf"), "w", newline="\n").write(f"""# Generated by boot-theme from the wallpaper and the lock screen settings; run it again to redraw.
+[General]
+background=background.png
+symbol=symbol.png
+font=JetBrainsMono Nerd Font
+bg={p['bg']}
+fg={p['fg']}
+accent={p['accent']}
+accent2={p['accent2']}
+crit=#e5534b
+frameCount={count}
+hasFrames={'yes' if lock['frames'] else 'no'}
+shader={shader}
+{prefs}""")
+
+
+def ink_shader(src, out):
+    """Compile the ink shader for the greeter (qsb, from qt6-shadertools); without it panels print plain grey."""
+    q = shutil.which("qsb") or "/usr/lib/qt6/bin/qsb"
+    if not os.path.isfile(q):
+        print("  login screen: qsb not found (pacman -S qt6-shadertools): panels print in plain grey")
+        return
+    if subprocess.run([q, "--qt6", "-o", out, src]).returncode != 0:
+        print("  login screen: the ink shader did not compile: panels print in plain grey")
+
+
+# ---------- main ----------
+def render(out, wall, symbol_svg, size, grub_font_maker=grub_fonts, lock=None):
+    """Draw the themes into out/grub, out/plymouth and out/sddm. Returns the palette."""
+    loader = SourceFileLoader("palette_pick", os.path.join(HERE, "palette-pick"))
+    pick = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(pick)  # load_module() is gone in Python 3.15
+    p = pick.pick(wall)
+    s = size[1] / DEMO_H
+    svg = re.sub(r'fill="[^"]*"', f'fill="{p["accent"]}"', symbol_svg)
+    g, pl, sd = os.path.join(out, "grub"), os.path.join(out, "plymouth"), os.path.join(out, "sddm")
+    for d in (g, pl, sd):
+        os.makedirs(d, exist_ok=True)
+    bgimg = background(wall, size, s, p["bg"])
+    bgimg.save(os.path.join(g, "background.png"))
+    bgimg.save(os.path.join(pl, "background.png"))
+    raster_svg(svg, round(60 * s), os.path.join(g, "symbol.png"))
+    raster_svg(svg, round(88 * s), os.path.join(pl, "symbol.png"))
+    grub_theme(g, p, size, s, os.path.join(g, "symbol.png"), grub_font_maker(g, s))
+    plymouth_theme(pl, p, size, s, password_card(os.path.join(pl, "card.png"), p, s))
+    sddm_theme(sd, p, os.path.join(g, "background.png"), os.path.join(g, "symbol.png"), wall, lock)
+    return p
+
+
+def set_grub_var(text, key, value):
+    line = f'{key}="{value}"'
+    # Replace the active setting if there is one (a commented line earlier would not win), else
+    # uncomment the example line, else append.
+    for pat in (rf"^\s*{key}=.*$", rf"^#\s*{key}=.*$"):
+        if re.search(pat, text, re.M):
+            return re.sub(pat, lambda _: line, text, count=1, flags=re.M)
+    return text.rstrip("\n") + "\n" + line + "\n"
+
+
+def install_grub(src, size):
+    if not os.path.isdir("/boot/grub") or not shutil.which("grub-mkconfig"):
+        print("GRUB not found (systemd-boot?): skipped the boot menu")
+        return
+    shutil.rmtree(GRUB_DIR, ignore_errors=True)
+    shutil.copytree(src, GRUB_DIR)
+    conf = "/etc/default/grub"
+    if not os.path.exists(conf + ".rice-backup"):
+        shutil.copy2(conf, conf + ".rice-backup")
+    with open(conf) as f:
+        text = f.read()
+    text = set_grub_var(text, "GRUB_THEME", f"{GRUB_DIR}/theme.txt")
+    text = set_grub_var(text, "GRUB_GFXMODE", f"{size[0]}x{size[1]},auto")
+    # Write a copy then rename, so a crash never leaves a truncated /etc/default/grub.
+    with open(conf + ".rice-new", "w") as f:
+        f.write(text)
+    shutil.copymode(conf, conf + ".rice-new")
+    os.replace(conf + ".rice-new", conf)
+    subprocess.run(["grub-mkconfig", "-o", "/boot/grub/grub.cfg"], check=True)
+    print(f"boot menu: {GRUB_DIR}")
+
+
+def install_plymouth(src):
+    if not shutil.which("plymouth-set-default-theme"):
+        print("Plymouth not installed: skipped the splash and disk password screen (pacman -S plymouth)")
+        return
+    shutil.rmtree(PLY_DIR, ignore_errors=True)
+    shutil.copytree(src, PLY_DIR)
+    subprocess.run(["plymouth-set-default-theme", "rice"], check=True)
+    confs = ["/etc/mkinitcpio.conf", *glob.glob("/etc/mkinitcpio.conf.d/*.conf")]
+    hooks = "".join(open(f).read() for f in confs if os.path.exists(f))
+    if not re.search(r"^HOOKS=.*\bplymouth\b", hooks, re.M):
+        print("splash: theme installed, but mkinitcpio has no plymouth hook yet. Add `plymouth` to HOOKS in\n"
+              "  /etc/mkinitcpio.conf (after `systemd` or `udev`, before `sd-encrypt`/`encrypt`), add `splash` to\n"
+              "  GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then run `sudo boot-theme` again.")
+        return
+    subprocess.run(["mkinitcpio", "-P"], check=True)
+    print(f"splash: {PLY_DIR} (initramfs rebuilt)")
+
+
+def install_sddm(src):
+    if not shutil.which("sddm"):
+        print("SDDM not installed: skipped the login screen (pacman -S sddm)")
+        return
+    if not os.path.isfile(os.path.join(src, "Main.qml")):
+        print("login screen QML not found (run install.sh again): skipped the login screen")
+        return
+    shutil.rmtree(SDDM_DIR, ignore_errors=True)
+    shutil.copytree(src, SDDM_DIR)
+    os.chmod(SDDM_DIR, 0o755)  # the greeter runs as the sddm user
+    os.makedirs(os.path.dirname(SDDM_CONF), exist_ok=True)
+    open(SDDM_CONF, "w").write("# Written by boot-theme.\n[Theme]\nCurrent=rice\n")
+    print(f"login screen: {SDDM_DIR} (shows at the next login)")
+    # /etc/sddm.conf is read after sddm.conf.d, so a theme set there wins over ours
+    main_conf = open("/etc/sddm.conf").read() if os.path.exists("/etc/sddm.conf") else ""
+    m = re.search(r"^\s*Current\s*=\s*(\S+)", main_conf, re.M)
+    if m and m.group(1) != "rice":
+        print(f"  note: /etc/sddm.conf sets Current={m.group(1)}, which overrides this; remove that line")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--size", help="screen size as WxH")
+    ap.add_argument("--render", metavar="DIR", help="only draw the theme files into DIR")
+    a = ap.parse_args()
+    if not a.render and os.geteuid() != 0:
+        sys.exit("run it with sudo: sudo boot-theme")
+    home = user_home()
+    try:
+        wall = open(os.path.join(home, ".cache/wall/current")).read().strip()
+        symbol = open(os.path.join(home, ".cache/rice/symbol.svg")).read()
+    except OSError as e:
+        sys.exit(f"no current wallpaper or symbol ({e.filename}): set one with `wall <image>` first")
+    size = tuple(map(int, a.size.lower().split("x"))) if a.size else screen_size()
+    out = a.render or tempfile.mkdtemp(prefix="boot-theme-")
+    p = render(out, wall, symbol, size, lock=lock_inputs(home))
+    print(f"drew the boot screens for {size[0]}x{size[1]} from {wall} (accent {p['accent']})")
+    if a.render:
+        return
+    install_grub(os.path.join(out, "grub"), size)
+    install_plymouth(os.path.join(out, "plymouth"))
+    install_sddm(os.path.join(out, "sddm"))
+    shutil.rmtree(out, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()

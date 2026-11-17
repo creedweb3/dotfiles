@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=rice
+Description=Login screen as the lock screen's manga page (theme.conf and frames are written by boot-theme)
+Type=sddm-theme
+Version=1.0
+Website=
+Screenshot=
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=rice
+Theme-API=2.0
+QtVersion=6

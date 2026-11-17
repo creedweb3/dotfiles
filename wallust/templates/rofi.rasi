@@ -1,0 +1,6 @@
+* {
+    bg: {{background}}e6;
+    fg: {{foreground}};
+    accent: {{color4}};
+    muted: {{color8}};
+}
