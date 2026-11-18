@@ -53,7 +53,8 @@ done
 # targets install.sh replaces; existing real files there are moved to the backup
 targets=(hypr/hyprland.lua hypr/hyprlock.conf hypr/hypridle.conf quickshell/rice kitty/kitty.conf
          rofi/config.rasi fastfetch/logo.txt wallust fontconfig/fonts.conf
-         gtk-3.0/gtk.css gtk-4.0/gtk.css yazi/theme.toml qt6ct/qt6ct.conf)
+         gtk-3.0/gtk.css gtk-4.0/gtk.css yazi/theme.toml qt6ct/qt6ct.conf
+         cava/config fastfetch/config.jsonc btop/btop.conf)
 backup="$HOME/.config/rice-backup-$(date +%Y%m%d-%H%M%S)"
 log="$HOME/.cache/rice-install.log"
 notes="$HOME/.cache/rice-install.notes"
@@ -187,7 +188,8 @@ confirm() {
 
 # ---------------------------------------------------------------- steps
 step_packages() {
-    sudo pacman -S --needed --noconfirm "${pkgs[@]}"
+    # -Syu: a fresh sync database and a full upgrade (a sync without upgrade risks a partial upgrade)
+    sudo pacman -Syu --needed --noconfirm "${pkgs[@]}"
 }
 
 step_aur() {
@@ -195,6 +197,7 @@ step_aur() {
         sudo pacman -S --needed --noconfirm git base-devel
         local tmp; tmp=$(mktemp -d); git clone --depth 1 https://aur.archlinux.org/yay-bin.git "$tmp/yay"
         (cd "$tmp/yay" && makepkg -si --noconfirm)
+        rm -rf "$tmp"
     fi
     yay -S --needed --noconfirm "${aur_core[@]}"
 }
@@ -231,7 +234,8 @@ step_configs() {
     link fontconfig/fonts.conf  "$HOME/.config/fontconfig/fonts.conf"
     # wallust writes these from the wallpaper; move any hand-made ones out of the way first.
     local f dst
-    for f in gtk-3.0/gtk.css gtk-4.0/gtk.css yazi/theme.toml; do
+    # cava and fastfetch configs are wallust outputs too; btop.conf is edited below.
+    for f in gtk-3.0/gtk.css gtk-4.0/gtk.css yazi/theme.toml cava/config fastfetch/config.jsonc; do
         dst="$HOME/.config/$f"
         if [ -e "$dst" ] && [ ! -L "$dst" ]; then mkdir -p "$backup/$(dirname "$f")"; mv "$dst" "$backup/$f"; fi
     done
@@ -267,6 +271,9 @@ EOT
     gs monospace-font-name 'JetBrainsMono Nerd Font 10'
     [ "$gtk_failed" = 0 ] || note "GTK settings were not saved: run install.sh again from inside Hyprland"
     mkdir -p "$HOME/.config/btop"
+    if [ -f "$HOME/.config/btop/btop.conf" ] && [ ! -L "$HOME/.config/btop/btop.conf" ]; then
+        mkdir -p "$backup/btop"; cp "$HOME/.config/btop/btop.conf" "$backup/btop/"
+    fi
     grep -q '^color_theme' "$HOME/.config/btop/btop.conf" 2>/dev/null &&
         sed -i 's/^color_theme.*/color_theme = "wallust"/' "$HOME/.config/btop/btop.conf" ||
         echo 'color_theme = "wallust"' >> "$HOME/.config/btop/btop.conf"
@@ -383,6 +390,9 @@ pick_preset
 confirm
 if [ "$demo" = 0 ]; then
     sudo -v || die "sudo failed"
+    # Ctrl-C stops the running step too (background jobs ignore SIGINT); on exit, end the keepalive below.
+    trap 'echo; say "$bad" "cancelled (log: $log)"; trap - INT TERM; kill 0' INT TERM
+    trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
     # keep sudo's timestamp fresh while steps run behind the spinner
     while kill -0 $$ 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done &
 fi

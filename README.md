@@ -16,7 +16,9 @@ readable.
 ## Install
 
 Arch Linux and Arch-based distros (EndeavourOS, CachyOS, ...). It needs
-Hyprland 0.57+ and Quickshell. Read `install.sh` before running it: it uses sudo.
+Hyprland 0.57+ and Quickshell. Read `install.sh` before running it: it uses sudo,
+runs a full system upgrade (`pacman -Syu`), and builds AUR packages (yay, the
+core AUR packages and any AUR apps you pick) without showing their PKGBUILDs.
 
     git clone https://github.com/creedweb3/dotfiles ~/dotfiles && cd ~/dotfiles
     ./install.sh
