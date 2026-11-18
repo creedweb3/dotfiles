@@ -1,0 +1,75 @@
+# Core packages from the official Arch repos (installed with pacman).
+# One package per line; # starts a comment.
+
+# compositor and session
+hyprland
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+hyprlock
+hypridle
+hyprpicker
+hyprsunset
+hyprcursor
+quickshell
+qt6-shadertools
+sddm
+
+# terminal and apps the rice themes
+kitty
+rofi
+fastfetch
+btop
+cava
+yazi
+ffmpegthumbnailer
+
+# wallpaper, colours and screenshots
+awww
+python-pillow
+librsvg
+xorg-xcursorgen
+grim
+slurp
+wl-clipboard
+cliphist
+wf-recorder
+tesseract
+tesseract-data-eng
+
+# sound and media
+pipewire
+wireplumber
+pavucontrol
+playerctl
+noise-suppression-for-voice
+sound-theme-freedesktop
+
+# hardware and network
+brightnessctl
+ddcutil
+upower
+power-profiles-daemon
+bluez
+bluez-utils
+blueman
+networkmanager
+network-manager-applet
+nm-connection-editor
+networkmanager-openvpn
+
+# look: fonts, icons, GTK and Qt
+ttf-jetbrains-mono-nerd
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+papirus-icon-theme
+adw-gtk-theme
+qt6ct
+
+# helpers the scripts call
+socat
+jq
+libnotify
+unicode-emoji
+pacman-contrib
+xdg-utils

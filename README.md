@@ -19,25 +19,39 @@ Arch Linux and Arch-based distros (EndeavourOS, CachyOS, ...). It needs
 Hyprland 0.57+ and Quickshell. Read `install.sh` before running it: it uses sudo.
 
     git clone https://github.com/creedweb3/dotfiles ~/dotfiles && cd ~/dotfiles
-    ./install.sh [--brave] [--vesktop] [--spicetify] [--all-apps] [wallpaper]
+    ./install.sh
 
-Without a wallpaper it starts from one of the presets' wallpapers. Existing
-configs are moved to `~/.config/rice-backup-<date>` first.
+In a terminal it checks the system, offers the optional apps and a starting
+preset in menus, shows a summary to confirm, then installs with a progress line
+per step (full output in `~/.cache/rice-install.log`). The menus use
+[gum](https://github.com/charmbracelet/gum), installed first if missing.
+Existing configs are moved to `~/.config/rice-backup-<date>` first.
 
-The flags add optional apps that the rice themes; none are installed by default:
-
-| Flag | Installs |
+| Option | Does |
 |---|---|
-| `--brave` | Brave, the browser SUPER+B and the browser special workspace start |
-| `--vesktop` | Vesktop (Discord), themed from the wallpaper |
-| `--spicetify` | Spicetify, which themes an installed Spotify |
-| `--all-apps` | all three |
+| `--apps=id,id` | pick optional apps by id, e.g. `--apps=brave,steam,vlc` |
+| `--all-apps` | pick every optional app |
+| `--yes` | no menus or questions (for scripts and reinstalls) |
+| `--demo` | walk through the screens without installing or changing anything |
+| `wallpaper` | start from this image instead of a preset wallpaper |
 
-Without `--brave`, change `browser` in `hypr/hyprland.lua` (and `web:` in
-`~/.config/rice/deck.conf`) to the browser you use.
+Package lists live in `packages/`:
 
-Other distros are not supported by the script; the package lists at the top of
-`install.sh` are the dependencies to find there.
+- `core.pacman` - the rice's packages from the official repos (pacman)
+- `core.aur` - the few from the AUR (yay, set up if missing)
+- `apps.conf` - the optional apps: id, source (`pacman` or `aur`), package,
+  category, name. Add a line to offer another app.
+
+Optional apps: Brave, Vesktop (Discord), Spotify, Spicetify, Tidal, VS Code,
+Claude, Claude Code, Steam (needs the multilib repo), qBittorrent, VLC and 7-Zip.
+None are installed unless picked.
+
+SUPER+B and the browser special workspace start Brave. Without it, change
+`browser` in `hypr/hyprland.lua` (and `web:` in `~/.config/rice/deck.conf`)
+to the browser you use.
+
+Other distros are not supported by the script; `packages/` lists the
+dependencies to find there.
 
 ## Keys
 
@@ -191,6 +205,7 @@ Settings > Themes.
 - `scripts/boot-theme` - GRUB, Plymouth and SDDM themes from the wallpaper (run with sudo)
 - `sddm/` - the login screen theme
 - `rice/deck.conf` - default commands for the quick panel's deck buttons
+- `packages/` - what install.sh installs: core packages and the optional apps
 
 ## License
 

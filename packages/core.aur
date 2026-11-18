@@ -1,0 +1,5 @@
+# Core packages from the AUR (installed with yay, which install.sh sets up if missing).
+# One package per line; # starts a comment.
+
+wallust
+tty-clock
