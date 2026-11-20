@@ -194,7 +194,7 @@ Settings > Themes.
 
 ## Layout
 
-- `hypr/hyprland.lua` - compositor, gaps, blur, opacity, keys (Hyprland 0.55+ reads only Lua)
+- `hypr/hyprland.lua` - compositor, gaps, blur, opacity, keys (Hyprland 0.57+ reads only Lua)
 - `hypr/hyprlock.conf`, `hypr/hypridle.conf` - lock screen and idle timeouts
 - `quickshell/` - bar, quick panel, OSD, shortcuts sheet, launcher, wallpaper picker,
   settings and password prompt; linked to `~/.config/quickshell/rice`, run as `qs -c rice`
