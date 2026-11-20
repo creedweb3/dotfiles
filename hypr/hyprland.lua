@@ -1,5 +1,5 @@
 -- Hyprland: tinted, translucent tiling desktop that matches the demo.
--- Hyprland 0.55+ reads this Lua file; hyprland.conf is no longer loaded.
+-- Hyprland 0.57+ reads this Lua file; hyprland.conf is no longer loaded.
 -- Colours come from the wallpaper: `wall <image>` makes wallust write
 -- ~/.config/hypr/colors.lua, then reloads Hyprland.
 
