@@ -332,7 +332,9 @@ Rectangle {
         width: round.d
         height: round.d
 
+        // the light wedges are off: their straight edges read as lines cutting across the art
         Shape {
+            visible: false
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             ShapePath {

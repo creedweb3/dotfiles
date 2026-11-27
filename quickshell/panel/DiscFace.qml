@@ -104,8 +104,9 @@ Item {
         }
     }
 
-    // light catching the disc: fixed while it turns
+    // light catching the disc: off, its wedge edges read as lines cutting across the art
     Shape {
+        visible: false
         width: root.d
         height: root.d
         anchors.centerIn: parent
