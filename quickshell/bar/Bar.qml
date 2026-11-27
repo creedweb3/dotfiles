@@ -39,16 +39,15 @@ PanelWindow {
     Timer {
         id: raiseLater
         interval: 60
-        onTriggered: bar.raised = Popup.mode !== ""
+        onTriggered: bar.raised = bar.popupOpen
     }
-    Connections {
-        target: Popup
-        function onModeChanged() {
-            if (Popup.mode === "")
-                bar.raised = false;
-            else if (!bar.raised)
-                raiseLater.restart();
-        }
+    // any pop-up: the quick panel / mini player (mode) or a side one like the notification centre
+    readonly property bool popupOpen: Popup.mode !== "" || Popup.side !== ""
+    onPopupOpenChanged: {
+        if (!popupOpen)
+            bar.raised = false;
+        else if (!bar.raised)
+            raiseLater.restart();
     }
 
     readonly property var monitor: Hyprland.monitorFor(screen)
