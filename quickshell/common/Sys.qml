@@ -170,7 +170,16 @@ Singleton {
 
     // ---- media player (MPRIS): the one picked in the media tab's source row while it is
     // running, else the playing one, else the first
-    readonly property var players: Mpris.players.values
+    // Electron apps (Tidal, Vesktop...) often show up twice: their own player and an empty one the
+    // built-in Chromium adds ("chromium.instance…", stopped, no controls). Players whose names match
+    // once spaces and dashes are dropped ("Tidal Hi-Fi" / "tidal-hifi") count as one app; the
+    // non-Chromium one is kept.
+    readonly property var players: {
+        const all = Mpris.players.values;
+        const key = p => String(p.identity || p.desktopEntry || p.dbusName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const isChromium = p => String(p.dbusName || "").indexOf("chromium.instance") >= 0;
+        return all.filter(p => !(isChromium(p) && all.some(q => q !== p && !isChromium(q) && key(q) === key(p))));
+    }
     property string chosenPlayer: ""   // its dbusName
     readonly property MprisPlayer player: players.find(p => p.dbusName === chosenPlayer) ?? players.find(p => p.isPlaying) ?? players[0] ?? null
 
