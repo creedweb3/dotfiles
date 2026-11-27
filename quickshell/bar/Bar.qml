@@ -41,8 +41,10 @@ PanelWindow {
         interval: 60
         onTriggered: bar.raised = bar.popupOpen
     }
-    // any pop-up: the quick panel / mini player (mode) or a side one like the notification centre
-    readonly property bool popupOpen: Popup.mode !== "" || Popup.side !== ""
+    // any pop-up: the quick panel / mini player (mode) or a side one like the notification centre,
+    // until it has fully gone: lowering the bar as soon as it starts closing would put the bar
+    // under the dim for the pixel un-build
+    readonly property bool popupOpen: Popup.mode !== "" || Popup.side !== "" || Popup.panelShown || Popup.sideShown
     onPopupOpenChanged: {
         if (!popupOpen)
             bar.raised = false;

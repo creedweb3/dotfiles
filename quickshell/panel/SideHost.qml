@@ -18,7 +18,8 @@ PanelWindow {
     screen: Quickshell.screens.find(s => s.name === Popup.sideScreen)
         ?? Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name)
         ?? Quickshell.screens[0]
-    visible: open || content.opacity > 0
+    // kept shown until the closing pixel un-build is done
+    visible: open || content.opacity > 0 || reveal.busy
 
     anchors {
         top: true
@@ -35,18 +36,29 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    // tell the bar (Bar.qml) while this is on screen, closing animation included
+    Binding {
+        target: Popup
+        property: "sideShown"
+        value: host.visible
+    }
+
     Connections {
         target: Popup
         function onSideChanged() {
-            if (Popup.side !== "")
+            if (Popup.side !== "") {
                 host.shownSide = Popup.side;
+                reveal.play();
+            } else {
+                reveal.unplay();
+            }
         }
     }
 
     Item {
         id: content
         anchors.fill: parent
-        opacity: host.open ? 1 : 0
+        opacity: host.open || reveal.busy ? 1 : 0
         focus: true
 
         Behavior on opacity {
@@ -65,24 +77,32 @@ PanelWindow {
             }
         }
 
-        Loader {
-            id: loader
-            // a fresh pop-up each time it opens (after the last one faded), so the centre
-            // resets its month and marks everything read
-            active: host.visible
+        // pixel build, spreading from the bar box that opened it
+        PixelReveal {
+            id: reveal
             y: Theme.popupTop - host.margins.top
             x: host.shownSide === "nc" ? Theme.barSide
                 : Math.round(Math.max(Theme.barSide, Math.min(Popup.sideX - width / 2, host.width - Theme.barSide - width)))
-            sourceComponent: host.shownSide === "nc" ? centre : small
-            layer.enabled: Prefs.shadow
-            layer.effect: PanelShadow {}
+            width: loader.width
+            height: loader.height
+            originX: host.shownSide === "nc" ? 0 : Popup.sideX - x
+
+            Loader {
+                id: loader
+                // a fresh pop-up each time it opens (after the last one faded), so the centre
+                // resets its month and marks everything read
+                active: host.visible
+                sourceComponent: host.shownSide === "nc" ? centre : small
+                layer.enabled: Prefs.shadow
+                layer.effect: PanelShadow {}
+            }
         }
     }
 
     Component {
         id: centre
         NotifCentre {
-            height: host.height - loader.y - Theme.barSide
+            height: host.height - reveal.y - Theme.barSide
         }
     }
     Component {

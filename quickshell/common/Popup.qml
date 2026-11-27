@@ -16,6 +16,9 @@ Singleton {
     property string side: ""         // "", "nc", "sound", "bt" or "wifi"
     property real sideX: 0           // small pop-ups: centre of the bar icon they belong to, in screen pixels
     property string sideScreen: ""   // name of the screen whose bar opened it
+    // still on screen (open, or playing its closing animation): the bar stays above them till then
+    property bool panelShown: false
+    property bool sideShown: false
 
     onModeChanged: if (mode !== "") side = ""
     onSideChanged: if (side !== "") mode = ""

@@ -20,7 +20,8 @@ PanelWindow {
     property string shownMode: "panel"
 
     screen: Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name) ?? Quickshell.screens[0]
-    visible: open || content.opacity > 0
+    // kept shown until the closing pixel un-build is done
+    visible: open || content.opacity > 0 || reveal.busy
 
     anchors {
         top: true
@@ -37,11 +38,22 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    // tell the bar (Bar.qml) while this is on screen, closing animation included
+    Binding {
+        target: Popup
+        property: "panelShown"
+        value: host.visible
+    }
+
     Connections {
         target: Popup
         function onModeChanged() {
-            if (Popup.mode !== "")
+            if (Popup.mode !== "") {
                 host.shownMode = Popup.mode;
+                reveal.play();
+            } else {
+                reveal.unplay();
+            }
         }
     }
 
@@ -54,7 +66,7 @@ PanelWindow {
     Item {
         id: content
         anchors.fill: parent
-        opacity: host.open ? 1 : 0
+        opacity: host.open || reveal.busy ? 1 : 0
         focus: true
 
         Behavior on opacity {
@@ -74,13 +86,23 @@ PanelWindow {
             }
         }
 
-        Loader {
+        // pixel build: the panel assembles out of squares, spreading from the box that opened it
+        PixelReveal {
+            id: reveal
             // top edge in line with the windows' top edges
             y: Theme.popupTop - host.margins.top
             x: host.shownMode === "player" ? Math.max(Theme.barSide, Math.min(Popup.playerRight - width, host.width - Theme.barSide - width)) : Math.round((host.width - width) / 2)
-            sourceComponent: host.shownMode === "player" ? player : panel
-            layer.enabled: Prefs.shadow
-            layer.effect: PanelShadow {}
+            width: ld.width
+            height: ld.height
+            // mini player: from the music box (its left part, next to the clock); quick panel: the centre
+            originX: host.shownMode === "player" ? Popup.playerRight - 248 + 60 - x : width / 2
+
+            Loader {
+                id: ld
+                sourceComponent: host.shownMode === "player" ? player : panel
+                layer.enabled: Prefs.shadow
+                layer.effect: PanelShadow {}
+            }
         }
     }
 
