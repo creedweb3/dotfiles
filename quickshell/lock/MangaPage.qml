@@ -240,7 +240,7 @@ Item {
                         id: music
                         y: 16 * page.s
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: parent.width * .72
+                        width: parent.width * .88
                         s: page.s
                         style: Prefs.mmus
                         accent: page.mga

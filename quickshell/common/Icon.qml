@@ -9,6 +9,7 @@ Item {
     property color color: Theme.fg
     property real size: 16
     property real stroke: 2.4    // in grid units, so it scales with the icon
+    property bool filled: false  // solid shape (media controls) instead of an outline
 
     implicitWidth: size
     implicitHeight: size
@@ -23,7 +24,7 @@ Item {
         ShapePath {
             strokeColor: root.color
             strokeWidth: root.stroke
-            fillColor: "transparent"
+            fillColor: root.filled ? root.color : "transparent"
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
             PathSvg { path: root.path }

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
+import "../common"
 
 // The lock's music line (the demo's mgMusic): the playing title, prev / play / next, and one accent
 // visual — spectrum bars, eq bars, a scrolling ticker or a moving wave — in the chosen style.
@@ -23,8 +24,8 @@ Item {
     readonly property color fgC: "#f6f3ec"
     readonly property string label: "<b><font color=\"#f6f3ec\">" + esc(title) + "</font></b>" + (artist ? " · " + esc(artist) : "")
 
-    // spectrum: a title too long for its row scrolls instead (spectrum + ticker)
-    readonly property string shown: style === "spectrum" && probe.implicitWidth > width - 3 * 26 * s - 30 * s ? "spectick" : style
+    // spectrum keeps its layout: the title now has two lines (title, artist) and elides cleanly
+    readonly property string shown: style
 
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
 
@@ -91,46 +92,69 @@ Item {
 
     Component {
         id: ttC
-        // Text's own implicitWidth is read-only, so an Item carries the capped width
+        // title on its own line, the artists under it, each cut with "…" if too long.
+        // (an Item carries the width: a Column's implicitWidth is read-only)
         Item {
-            implicitWidth: Math.min(probe.implicitWidth, mus.width)
-            implicitHeight: tt.implicitHeight
-            Text {
-                id: tt
-                anchors.fill: parent
-                text: mus.label
-                textFormat: Text.StyledText
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
-                font.pixelSize: 12 * mus.s
-                color: mus.dimC
+            id: ttBox
+            readonly property bool centred: !!(parent && parent.parent && parent.parent.parent && parent.parent.parent.modelData && parent.parent.parent.modelData.c)
+            implicitWidth: Math.min(Math.max(ttTitle.implicitWidth, ttArtist.implicitWidth), mus.width)
+            implicitHeight: ttCol.implicitHeight
+            Column {
+                id: ttCol
+                width: parent.width
+                spacing: 2 * mus.s
+                Text {
+                    id: ttTitle
+                    width: parent.width
+                    text: mus.title
+                    elide: Text.ElideRight
+                    horizontalAlignment: ttBox.centred ? Text.AlignHCenter : Text.AlignLeft
+                    font { family: Theme.fontFamily; pixelSize: 13 * mus.s; bold: true }
+                    color: mus.fgC
+                }
+                Text {
+                    id: ttArtist
+                    visible: text !== ""
+                    width: parent.width
+                    text: mus.artist
+                    elide: Text.ElideRight
+                    horizontalAlignment: ttBox.centred ? Text.AlignHCenter : Text.AlignLeft
+                    font { family: Theme.fontFamily; pixelSize: 11 * mus.s }
+                    color: mus.dimC
+                }
             }
         }
     }
+
     Component {
         id: ntC
-        Text { text: "♫"; font.pixelSize: 17 * mus.s; color: mus.accent }
+        Icon { path: Icons.music; size: 16 * mus.s; stroke: 2; color: mus.accent }
     }
     Component {
         id: ctlC
+        // previous / play-pause / next as solid shapes, all in one style (the font has no glyphs
+        // for ⏮ ⏭, which came out as colour emoji boxes)
         Row {
             Repeater {
-                model: [["⏮", "prev"], [mus.playing ? "❚❚" : "▶", "toggle"], ["⏭", "next"]]
-                Text {
+                model: [[Icons.prev, "prev"], [mus.playing ? Icons.pause : Icons.play, "toggle"], [Icons.next, "next"]]
+                Item {
                     required property var modelData
-                    width: 26 * mus.s
-                    height: 24 * mus.s
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    text: modelData[0]
-                    font.pixelSize: 12 * mus.s
-                    color: ma.containsMouse ? mus.accent : modelData[1] === "toggle" ? mus.fgC : mus.dimC
-                    scale: ma.pressed ? .88 : 1
+                    width: 28 * mus.s
+                    height: 26 * mus.s
+                    Icon {
+                        anchors.centerIn: parent
+                        path: parent.modelData[0]
+                        size: (parent.modelData[1] === "toggle" ? 16 : 13) * mus.s
+                        stroke: 1.6
+                        filled: true   // solid, like the pause bars, all three alike
+                        color: ma.containsMouse ? mus.accent : parent.modelData[1] === "toggle" ? mus.fgC : mus.dimC
+                        scale: ma.pressed ? .88 : 1
+                    }
                     MouseArea {
                         id: ma
                         anchors.fill: parent
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: mus[parent.modelData[1]]()
                     }
                 }
@@ -173,7 +197,7 @@ Item {
             clip: true
             Text {
                 id: tk
-                text: (mus.label + "&nbsp;&nbsp;&nbsp;♫&nbsp;&nbsp;&nbsp;").repeat(2)
+                text: (mus.label + "&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;").repeat(2)
                 textFormat: Text.StyledText
                 font.pixelSize: 12 * mus.s
                 color: mus.dimC
