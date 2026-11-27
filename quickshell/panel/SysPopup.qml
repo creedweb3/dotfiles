@@ -60,7 +60,7 @@ Rectangle {
                 ListRow {
                     required property var modelData
                     width: parent.width
-                    name: modelData.description || modelData.nickname || modelData.name
+                    name: Sys.deviceName(modelData)
                     detail: modelData === Pipewire.defaultAudioSink ? "in use" : ""
                     on: modelData === Pipewire.defaultAudioSink
                     onClicked: Pipewire.preferredDefaultAudioSink = modelData
@@ -145,13 +145,13 @@ Rectangle {
 
             Label {
                 visible: btList.count === 0
-                text: "no paired devices"
+                text: "no paired devices yet: scan below"
                 color: Theme.dim
             }
 
             Repeater {
                 id: btList
-                model: root.kind === "bt" && Sys.btAdapter ? Sys.btAdapter.devices.values.filter(d => d.paired || d.bonded) : []
+                model: root.kind === "bt" && Sys.btAdapter ? Sys.btAdapter.devices.values.filter(d => (d.paired || d.bonded) && !Sys.btHidden(d)) : []
 
                 ListRow {
                     required property var modelData
@@ -163,6 +163,65 @@ Rectangle {
                         : "paired"
                     on: modelData.connected
                     onClicked: modelData.connected ? modelData.disconnect() : modelData.connect()
+                }
+            }
+        }
+
+        // new devices: scan here (stops on its own after 30 s), click one to pair, trust and connect it
+        Card {
+            id: btNew
+            visible: root.kind === "bt" && Sys.btOn
+            width: parent.width
+            title: "new devices"
+
+            readonly property bool scanning: Sys.btAdapter !== null && Sys.btAdapter.discovering
+            // unnamed devices in range are only addresses (mostly phones' and TVs' beacons): left out
+            readonly property var found: Sys.btAdapter ? Sys.btAdapter.devices.values.filter(d => !d.paired && !d.bonded && d.deviceName && !Sys.btHidden(d)) : []
+
+            function scan(on) {
+                if (!Sys.btAdapter)
+                    return;
+                Sys.btAdapter.discovering = on;
+                if (on)
+                    btScanStop.restart();
+            }
+            Timer {
+                id: btScanStop
+                interval: 30000
+                onTriggered: btNew.scan(false)
+            }
+
+            ListRow {
+                width: parent.width
+                name: btNew.scanning ? "looking for devices…" : "scan for devices"
+                detail: btNew.scanning ? "stop" : "put headphones in pairing mode first"
+                on: btNew.scanning
+                onClicked: btNew.scan(!btNew.scanning)
+            }
+
+            Repeater {
+                model: root.kind === "bt" ? btNew.found : []
+
+                ListRow {
+                    id: newRow
+                    required property var modelData
+                    width: parent.width
+                    name: modelData.name || modelData.deviceName
+                    detail: modelData.pairing ? "pairing…" : "pair"
+                    onClicked: {
+                        if (modelData.pairing)
+                            return modelData.cancelPair();
+                        modelData.trusted = true;   // so it reconnects on its own later
+                        modelData.pair();
+                    }
+                    Connections {
+                        target: newRow.modelData
+                        ignoreUnknownSignals: true
+                        function onPairedChanged() {
+                            if (newRow.modelData.paired)
+                                newRow.modelData.connect();
+                        }
+                    }
                 }
             }
         }

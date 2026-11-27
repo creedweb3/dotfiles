@@ -98,11 +98,13 @@ Rectangle {
                     font.pixelSize: Theme.smallSize
                     elide: Text.ElideRight
                 }
-                Label {
+                Icon {
                     anchors.right: parent.right
-                    text: "✕"
+                    anchors.verticalCenter: parent.verticalCenter
+                    path: Icons.cross
+                    size: 11
+                    stroke: 2.4
                     color: closeMouse.containsMouse ? Theme.accent : Theme.dim
-                    font.pixelSize: Theme.smallSize
 
                     MouseArea {
                         id: closeMouse

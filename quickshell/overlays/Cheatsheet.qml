@@ -250,7 +250,7 @@ Scope {
             y: topY < 0 ? Math.round((parent.height - height) / 2) : topY
             width: root.kbWidth + 56
             height: body.implicitHeight + 38
-            color: Ui.alpha(Theme.bg, 0.93)
+            color: Theme.glass
             border.color: Theme.muted
             focus: true
             Keys.onPressed: e => root.key(e)

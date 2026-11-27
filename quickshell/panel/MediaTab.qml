@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "../common"
 
 // Quick panel, media tab: the current player with cover, seek bar and controls, the players to
@@ -6,7 +7,8 @@ import "../common"
 // media player (Prefs.mstyle), as in the demo:
 //   poster  the cover beside "on <player>", title, artist and the controls
 //   vinyl   a larger record with its tonearm, title, artist and the controls beside it
-//   disc    the cover beside the title, the controls centred under the seek bar
+//   disc    the playing track as a large CD, centred, the cover over the whole disc; title and
+//           artist under it, then the seek bar and round previous / play / next buttons
 // The demo's "up next" line is left out: MPRIS players do not share their queue.
 Column {
     id: root
@@ -21,13 +23,75 @@ Column {
         width: parent.width
         spacing: 10
 
+        // disc: the playing track, big and centred
+        Column {
+            visible: root.style === "disc"
+            width: parent.width
+            spacing: 6
+
+            Item {
+                width: parent.width
+                height: disc.height + 18
+
+                // soft shadow under the disc, as the cover in a record shelf
+                Rectangle {
+                    id: discShadow
+                    width: disc.width
+                    height: width
+                    radius: width / 2
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: disc.y
+                    color: "black"
+                    visible: false
+                    layer.enabled: true
+                }
+                MultiEffect {
+                    source: discShadow
+                    anchors.fill: discShadow
+                    shadowEnabled: true
+                    shadowColor: Qt.rgba(0, 0, 0, 0.55)
+                    shadowBlur: 1.0
+                    blurMax: 32
+                    shadowVerticalOffset: 10
+                    opacity: root.player ? 1 : 0.4
+                }
+                DiscFace {
+                    id: disc
+                    width: Math.min(parent.width * 0.7, 250)
+                    height: width
+                    y: 4
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    // nothing playing: the wallpaper on the disc
+                    source: root.player && root.player.trackArtUrl ? root.player.trackArtUrl : Theme.wallpaperPath ? "file://" + Theme.wallpaperPath : ""
+                    spinning: root.player !== null && root.player.isPlaying
+                    rim: root.player ? Theme.accent : Theme.muted
+                }
+            }
+            Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: root.player ? root.player.trackTitle || "nothing playing" : "nothing playing"
+                font.pixelSize: 16
+                font.bold: true
+                elide: Text.ElideRight
+            }
+            Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: !root.player ? "start music in any player" : root.player.trackTitle ? [root.player.trackArtist, root.player.identity].filter(s => s).join("  ·  ") : (root.player.identity || "player") + " is open"
+                color: Theme.dim
+                elide: Text.ElideRight
+            }
+        }
+
         Row {
+            visible: root.style !== "disc"
             width: parent.width
             spacing: 14
 
             Art {
                 id: art
-                width: root.style === "vinyl" ? 170 : 150
+                width: root.style === "poster" ? 150 : 170
                 height: width
             }
 
@@ -46,7 +110,7 @@ Column {
                 }
                 Label {
                     width: parent.width
-                    text: root.player ? root.player.trackTitle || "unknown track" : "nothing playing"
+                    text: root.player ? root.player.trackTitle || "nothing playing" : "nothing playing"
                     font.pixelSize: root.style === "vinyl" ? 18 : 15
                     font.bold: true
                     wrapMode: Text.Wrap
@@ -111,9 +175,29 @@ Column {
             }
         }
 
-        MediaControls {
+        Row {
             visible: root.style === "disc"
             anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 14
+            RoundButton {
+                anchors.verticalCenter: parent.verticalCenter
+                icon: Icons.prev
+                enabled: root.player !== null && root.player.canGoPrevious
+                onClicked: root.player.previous()
+            }
+            RoundButton {
+                anchors.verticalCenter: parent.verticalCenter
+                big: true
+                icon: root.player && root.player.isPlaying ? Icons.pause : Icons.play
+                enabled: root.player !== null && root.player.canTogglePlaying
+                onClicked: root.player.togglePlaying()
+            }
+            RoundButton {
+                anchors.verticalCenter: parent.verticalCenter
+                icon: Icons.next
+                enabled: root.player !== null && root.player.canGoNext
+                onClicked: root.player.next()
+            }
         }
     }
 

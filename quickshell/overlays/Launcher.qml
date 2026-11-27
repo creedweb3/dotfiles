@@ -443,7 +443,7 @@ Scope {
             anchors.topMargin: 48
             width: root.side ? 380 : 520
             height: root.side ? parent.height - 48 - 14 : col.implicitHeight + 4
-            color: Ui.alpha(Theme.bg, 0.92)
+            color: Theme.glass
             border { color: Theme.accent; width: 2 }
             layer.enabled: Prefs.shadow
             layer.effect: PanelShadow {}

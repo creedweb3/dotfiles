@@ -74,7 +74,7 @@ Scope {
 
     component Box: Rectangle {
         Layout.preferredHeight: 34
-        color: Ui.alpha(Theme.bg, 0.88)
+        color: Theme.glass
         border.color: Theme.muted
         layer.enabled: Prefs.shadow
         layer.effect: PanelShadow {}
@@ -86,7 +86,7 @@ Scope {
         required property var modelData
         required property int index
         readonly property bool picked: index === root.sel
-        color: Ui.alpha(Theme.bg, 0.86)
+        color: Theme.glass
         border.color: picked ? Theme.accent : cardArea.containsMouse ? Theme.dim : Theme.muted
         implicitHeight: cardCol.implicitHeight + 14
         layer.enabled: Prefs.shadow

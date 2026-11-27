@@ -19,6 +19,9 @@ Singleton {
     readonly property var spec: ({
         marker: ["dimframe", ["frame", "dim", "dimframe", "fill"]],
         gap: [6, 2, 14],
+        // size of the whole shell (bar, panels, pop-ups); scripts/rice-shell starts Quickshell with
+        // QT_SCALE_FACTOR from it. auto: from the screen height (1080p -> 125%, 1440p -> 150%)
+        uiscale: ["auto", ["auto", "100", "125", "150", "175", "200"]],
         anim: ["spin", ["spin", "swing", "none"]],
         sysic: ["peek", ["text", "icon", "peek"]],
         wstyle: ["carousel", ["carousel", "side", "grid"]],
@@ -135,6 +138,7 @@ Singleton {
     // bar
     readonly property string marker: valid("marker", adapter.marker)
     readonly property int gap: valid("gap", adapter.gap)
+    readonly property string uiscale: valid("uiscale", adapter.uiscale)
     readonly property string anim: valid("anim", adapter.anim)
     readonly property string sysic: valid("sysic", adapter.sysic)
     // panels
@@ -217,6 +221,7 @@ Singleton {
             id: adapter
             property string marker: "dimframe"
             property int gap: 6
+            property string uiscale: "auto"
             property string anim: "spin"
             property string sysic: "peek"
             property string wstyle: "carousel"

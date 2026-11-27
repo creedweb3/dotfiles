@@ -26,8 +26,12 @@ Singleton {
     // Outer boxes (bar boxes, panel edges) mix 40% accent into the line, as the demo's
     // default "border tint"; lines inside panels stay plain muted.
     readonly property color line: mix(accent, muted, 0.4)
-    readonly property color boxFill: alpha(panel, 0.84)
-    readonly property color glass: alpha(bg, 0.88)
+    // Glass: how much of Hyprland's blur shows through the bar boxes and panels follows
+    // Settings > Panels > behind blur (Prefs.sblur 0-12, default 9 -> 61% / 65% fill).
+    // At 0 Hyprland does not blur them, so they stay nearly solid.
+    readonly property real glassAlpha: Math.max(0.5, 0.92 - Prefs.sblur * 0.03)
+    readonly property color boxFill: alpha(panel, glassAlpha - 0.04)
+    readonly property color glass: alpha(bg, glassAlpha)
 
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
     readonly property int fontSize: 12
@@ -37,7 +41,10 @@ Singleton {
     readonly property int barHeight: 30
     readonly property int barTop: 8
     readonly property int barSide: 14
-    readonly property int popupTop: 52    // windows' top edge: bar + Hyprland gaps_out
+    // Shell size (rice-shell sets QT_SCALE_FACTOR from Settings > Bar > ui size). Everything here is in
+    // scaled pixels, but Hyprland's gaps are not, so they shrink by this factor in shell units.
+    readonly property real uiScale: Number(Quickshell.env("QT_SCALE_FACTOR")) || 1
+    readonly property int popupTop: barTop + barHeight + Math.round(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
 
     // Bumped on every palette or symbol change, so images reload (cache busting).
     property int rev: 0

@@ -115,7 +115,7 @@ Column {
         }
     }
 
-    function nameOf(n) { return n ? (n.description || n.nickname || n.name) : "" }
+    function nameOf(n) { return n ? (n.isStream ? (n.description || n.nickname || n.name) : Sys.deviceName(n)) : "" }
     function appName(n) { return (n.properties && n.properties["application.name"]) || nameOf(n) }
 
     // Volume and mute are only live on nodes that are tracked.
@@ -130,7 +130,7 @@ Column {
             height: 22
             Slider {
                 anchors { left: parent.left; right: pct.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                from: 0; to: 100; step: 5
+                from: 0; to: 100; step: 1
                 value: vrow.node && vrow.node.audio ? vrow.node.audio.volume * 100 : 0
                 onMoved: v => { if (vrow.node && vrow.node.audio) vrow.node.audio.volume = Math.round(v) / 100 }
             }

@@ -139,26 +139,28 @@ Column {
                 spacing: 10
 
                 Art {
-                    width: 40
-                    height: 40
+                    width: 44
+                    height: 44
                 }
                 Column {
-                    width: parent.width - 40 - 10 - 28 - 20
+                    width: parent.width - 44 - 10 - (Sys.player ? 28 + 20 : 0)
                     anchors.verticalCenter: parent.verticalCenter
                     Label {
                         width: parent.width
-                        text: Sys.player ? Sys.player.trackTitle : "nothing playing"
+                        text: Sys.player && Sys.player.trackTitle ? Sys.player.trackTitle : "nothing playing"
                         font.bold: true
                         elide: Text.ElideRight
                     }
                     Label {
                         width: parent.width
-                        text: Sys.player ? Sys.player.trackArtist : ""
+                        text: !Sys.player ? "start music in any player" : Sys.player.trackTitle ? Sys.player.trackArtist : (Sys.player.identity || "player") + " is open"
                         color: Theme.dim
+                        font.pixelSize: Sys.player ? Theme.fontSize : Theme.smallSize
                         elide: Text.ElideRight
                     }
                 }
                 IconButton {
+                    visible: Sys.player !== null
                     anchors.verticalCenter: parent.verticalCenter
                     icon: Sys.player && Sys.player.isPlaying ? Icons.pause : Icons.play
                     size: 18

@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import "../common"
 import "../panel"
 
@@ -18,6 +19,31 @@ Column {
             options: segRow.options
             value: Prefs[segRow.key]
             onPicked: v => Prefs.set(segRow.key, v)
+        }
+    }
+
+    SetCard {
+        title: "size"
+        SetRow {
+            label: "ui size"
+            SetSeg {
+                options: [["auto", "auto"], ["100", "100%"], ["125", "125%"], ["150", "150%"], ["175", "175%"], ["200", "200%"]]
+                value: Prefs.uiscale
+                onPicked: v => {
+                    if (v === Prefs.uiscale)
+                        return;
+                    Prefs.set("uiscale", v);
+                    // the scale is fixed when Quickshell starts: restart the shell at the new size
+                    Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rice-shell", "--restart"]);
+                }
+            }
+        }
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "bar, panels and pop-ups together; the shell restarts to apply it. auto picks from your screen height."
+            font { family: Theme.fontFamily; pixelSize: 11 }
+            color: Theme.dim
         }
     }
 

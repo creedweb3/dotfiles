@@ -24,11 +24,34 @@ Singleton {
     readonly property bool hasSink: sink !== null && sink.audio !== null
     readonly property int volume: hasSink ? Math.round(sink.audio.volume * 100) : 0
     readonly property bool muted: hasSink ? sink.audio.muted : true
-    readonly property string sinkName: sink ? (sink.description || sink.nickname || sink.name) : "no output"
+    readonly property string sinkName: sink ? deviceName(sink) : "no output"
     readonly property bool hasSource: source !== null && source.audio !== null
     readonly property int micVolume: hasSource ? Math.round(source.audio.volume * 100) : 0
     readonly property bool micMuted: hasSource ? source.audio.muted : true
-    readonly property string sourceName: source ? (source.description || source.nickname || source.name) : "no input"
+    readonly property string sourceName: source ? deviceName(source) : "no input"
+
+    // A readable name for a sound device instead of its chip name ("Starship/Matisse HD Audio
+    // Controller Analog Stereo"): what it is and how it is connected.
+    //   HDMI / DisplayPort  the monitor's name when PipeWire knows it: "DELL S2721HGF · HDMI"
+    //   motherboard jack    "Headphones / speakers · jack", "Microphone · jack"
+    //   Bluetooth, USB      the device's own name: "WH-1000XM4 · Bluetooth", "Razer Seiren Mini · USB"
+    function deviceName(n) {
+        if (!n)
+            return "";
+        const name = n.name || "", desc = n.description || n.nickname || name;
+        const clean = d => d.replace(/\s+(Analog|Digital)?\s*(Stereo|Mono|Surround[\s\d.]*)(\s*\(HDMI\))?$/i, "").replace(/^Audio\s+/, "").trim();
+        if (/^bluez_/.test(name))
+            return clean(desc) + " · Bluetooth";
+        if (/hdmi|iec958|displayport/i.test(name)) {
+            const mon = desc.match(/\[([^\]]+)\]/);
+            return (mon ? mon[1] : "Monitor speakers") + " · HDMI";
+        }
+        if (/\.usb-|^alsa_\w+\.usb/.test(name))
+            return clean(desc) + " · USB";
+        if (/^alsa_/.test(name) && /analog/i.test(name))
+            return (n.isSink ? "Headphones / speakers" : "Microphone") + " · jack";
+        return clean(desc) || name;
+    }
 
     function setVolume(percent) {
         if (!hasSink)
@@ -63,8 +86,16 @@ Singleton {
     // ---- Bluetooth
     readonly property var btAdapter: Bluetooth.defaultAdapter
     readonly property bool btOn: btAdapter !== null && btAdapter.enabled
-    readonly property var btDevice: btAdapter ? (btAdapter.devices.values.find(d => d.connected) ?? null) : null
+    readonly property var btDevice: btAdapter ? (btAdapter.devices.values.find(d => d.connected && !btHidden(d)) ?? null) : null
     readonly property string btName: !btOn ? "off" : btDevice ? (btDevice.name || btDevice.deviceName) : "on"
+
+    // Devices that only speak Bluetooth Low Energy and name themselves "… [LE]" (a speaker's app and
+    // battery side, beside its real audio device): hidden from the Bluetooth lists, as they can't
+    // play sound and look like a second copy of the device.
+    function btHidden(d) {
+        const n = d ? (d.name || d.deviceName || "") : "";
+        return /\[LE\]\s*$/.test(n);
+    }
 
     function toggleBt() {
         if (btAdapter)

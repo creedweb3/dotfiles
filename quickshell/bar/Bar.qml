@@ -31,7 +31,25 @@ PanelWindow {
     color: "transparent"
 
     WlrLayershell.namespace: "rice-bar"
-    WlrLayershell.layer: WlrLayer.Top
+    // Above the panels' full-screen dim while one is open, back under full-screen windows after.
+    // Hyprland stacks a surface that joins a layer on top of it, so the bar moves a moment after
+    // the panel has appeared.
+    property bool raised: false
+    WlrLayershell.layer: raised ? WlrLayer.Overlay : WlrLayer.Top
+    Timer {
+        id: raiseLater
+        interval: 60
+        onTriggered: bar.raised = Popup.mode !== ""
+    }
+    Connections {
+        target: Popup
+        function onModeChanged() {
+            if (Popup.mode === "")
+                bar.raised = false;
+            else if (!bar.raised)
+                raiseLater.restart();
+        }
+    }
 
     readonly property var monitor: Hyprland.monitorFor(screen)
     readonly property int activeWs: monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id : Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
@@ -71,12 +89,14 @@ PanelWindow {
     }
 
     Clock {
+        id: clock
         screenName: bar.screen.name
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
     }
 
     Row {
+        id: centreRow
         anchors.centerIn: parent
         spacing: Theme.gap
 
@@ -123,12 +143,20 @@ PanelWindow {
         }
     }
 
+    // Now playing sits right of the clock and takes only the room left before the workspaces,
+    // so a long title never slides under them.
+    Music {
+        anchors.left: clock.right
+        anchors.leftMargin: Theme.gap
+        anchors.verticalCenter: parent.verticalCenter
+        maxWidth: centreRow.x - Theme.gap * 2 - (clock.x + clock.width + Theme.gap)
+    }
+
     Row {
+        id: sysRow
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.gap
-
-        Music {}
 
         OpenThx {}
 
@@ -144,7 +172,7 @@ PanelWindow {
                 else
                     bar.sideFor("sound", soundBox);
             }
-            onScrolled: dy => Sys.setVolume(Sys.volume + (dy > 0 ? 5 : -5))
+            onScrolled: dy => Sys.setVolume(Sys.volume + (dy > 0 ? 1 : -1))
         }
 
         SysBox {

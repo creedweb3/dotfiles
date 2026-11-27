@@ -13,7 +13,7 @@ Column {
 
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property bool on: !!adapter && adapter.enabled
-    readonly property var devices: adapter ? adapter.devices.values : []
+    readonly property var devices: adapter ? adapter.devices.values.filter(d => !Sys.btHidden(d)) : []
     readonly property var known: devices.filter(d => d.paired || d.bonded)
     // Unnamed devices in range are only addresses; leave them out of the list.
     readonly property var found: devices.filter(d => !d.paired && !d.bonded && d.deviceName)

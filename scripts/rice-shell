@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Start the Quickshell shell (`qs -c rice`) at the size picked in Settings > Bar > ui size
+# (uiscale in ~/.config/rice/prefs.json), through QT_SCALE_FACTOR.
+#   auto  from the focused screen's height in logical pixels:
+#         up to 900 -> 100%, 1200 (1080p) -> 125%, 1600 (1440p) -> 150%, above -> 175%
+# Usage: rice-shell            start it (Hyprland runs this at login)
+#        rice-shell --restart  stop the running shell first (the settings page runs this)
+set -u
+
+prefs="$HOME/.config/rice/prefs.json"
+
+if [ "${1:-}" = --restart ]; then
+    sleep 0.3   # let the settings page finish writing prefs.json
+    pkill -x qs 2>/dev/null
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x qs >/dev/null || break; sleep 0.2; done
+fi
+
+pick=$(jq -r '.uiscale // "auto"' "$prefs" 2>/dev/null)
+case "$pick" in
+    100 | 125 | 150 | 175 | 200) scale=$(awk -v p="$pick" 'BEGIN { print p / 100 }') ;;
+    *)
+        # logical height = pixels / monitor scale (a HiDPI screen Hyprland already scales stays at 100%)
+        h=$(hyprctl monitors -j 2>/dev/null | jq -r '[.[] | select(.focused)][0] // .[0] | .height / .scale' 2>/dev/null)
+        scale=$(awk -v h="${h:-1080}" 'BEGIN { print (h <= 900 ? 1 : h <= 1200 ? 1.25 : h <= 1600 ? 1.5 : 1.75) }')
+        ;;
+esac
+
+QT_SCALE_FACTOR="$scale" exec setsid -f qs -c rice >/dev/null 2>&1

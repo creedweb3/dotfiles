@@ -115,7 +115,7 @@ Scope {
             anchors.centerIn: parent
             width: 800
             height: 560
-            color: Ui.alpha(Theme.bg, 0.96)
+            color: Theme.glass
             border.color: Theme.muted
             focus: true
             Keys.onEscapePressed: root.hide()

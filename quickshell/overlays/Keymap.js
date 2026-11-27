@@ -30,7 +30,7 @@ var groups = [
         ["system monitor (special)", "SUPER+`", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" sysmon"]}, "sysmon"]]],
     ["media", [
         ["play / pause", "XF86AudioPlay", {c: ["playerctl", "play-pause"]}],
-        ["volume up / down", "XF86AudioRaiseVolume", {c: ["wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+"]}],
+        ["volume up / down", "XF86AudioRaiseVolume", {c: ["wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "1%+"]}],
         ["mute", "XF86AudioMute", {c: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]}],
         ["mic mute", "SUPER+U", {c: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]}, "micmute"]]],
     ["system", [

@@ -1,25 +1,31 @@
 import QtQuick
 import "../common"
 
-// Mini player under the bar's music box: a square as wide as that box. The cover fills it;
-// the palette's swatches, title, seek line and controls sit over a dark fade at the bottom.
+// Mini player under the bar's music box, as wide as that box.
+//   poster  a square: the cover fills it; swatches, title, seek line and controls sit over a
+//           dark fade at the bottom
+//   disc / vinyl  the disc on top, the text and controls under it, so nothing covers it
 // Double click the cover: the quick panel's media tab.
 Rectangle {
     id: root
 
     readonly property var player: Sys.player
     readonly property real length: player && player.lengthSupported ? player.length : 0
+    readonly property bool poster: Prefs.mstyle === "poster"
 
     width: 248
-    height: 248
+    height: poster ? 248 : 254 + info.implicitHeight
     color: Theme.glass
     border.width: 1
     border.color: Theme.line
     clip: true
 
     Art {
-        anchors.fill: parent
-        anchors.margins: 1
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: root.poster ? 1 : 14
+        height: root.poster ? parent.height - 2 : width
     }
 
     MouseArea {
@@ -28,6 +34,7 @@ Rectangle {
     }
 
     Rectangle {
+        visible: root.poster
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -50,6 +57,7 @@ Rectangle {
 
         // the palette, as a strip of swatches (the demo's poster look)
         Row {
+            visible: root.poster
             bottomPadding: 2
             spacing: 3
             Repeater {
@@ -66,13 +74,13 @@ Rectangle {
         }
         Label {
             width: parent.width
-            text: root.player ? root.player.trackTitle || "unknown track" : "nothing playing"
+            text: root.player ? root.player.trackTitle || "nothing playing" : "nothing playing"
             font.bold: true
             elide: Text.ElideRight
         }
         Label {
             width: parent.width
-            text: root.player ? root.player.trackArtist : ""
+            text: root.player ? (root.player.trackTitle ? root.player.trackArtist : (root.player.identity || "player") + " is open") : ""
             color: Theme.dim
             elide: Text.ElideRight
         }

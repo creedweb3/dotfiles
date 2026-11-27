@@ -60,7 +60,8 @@ hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
 hl.on("hyprland.start", function()
     hl.exec_cmd("awww-daemon")
     hl.exec_cmd("sleep 0.5 && " .. home .. "/.local/bin/wall --restore")
-    hl.exec_cmd("qs -c rice")
+    -- rice-shell starts `qs -c rice` at the ui size from Settings > Bar
+    hl.exec_cmd(home .. "/.local/bin/rice-shell")
     hl.exec_cmd("hypridle")
     -- Night light (Settings > Display > Night light) if it was left on.
     hl.exec_cmd('f="$HOME/.config/hypr/rice-night.conf"; grep -q "^# rice: enabled=1" "$f" 2>/dev/null && hyprsunset -c "$f"')
@@ -184,9 +185,11 @@ hl.window_rule({
 
 -- The Quickshell bar and pop-ups sit on blurred glass.
 -- ignore_alpha above 0 keeps the see-through gaps between bar boxes unblurred.
--- Settings > Panels > behind blur: 0 turns it off (Hyprland has one blur size, shared with windows).
+-- Hyprland matches the whole namespace, so the pattern ends in .* (rice-bar, rice-settings, ...).
+-- Settings > Panels > behind blur: 0 turns it off; higher values also make the glass more see-through
+-- (Theme.glassAlpha). Hyprland has one blur size, shared with windows.
 local sblur = tonumber(pref("sblur", { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" }, "9"))
-hl.layer_rule({ match = { namespace = "^(quickshell|rice|rofi)" }, blur = sblur > 0, ignore_alpha = 0.05 })
+hl.layer_rule({ match = { namespace = "(quickshell|rice|rofi).*" }, blur = sblur > 0, ignore_alpha = 0.05 })
 
 -- Settings > Shortcuts writes rice-keys.lua: { ["id"] = "SUPER + K", ... } for each shortcut moved
 -- off its default (ids match quickshell/overlays/Keymap.js). K(id, default) picks the key to bind.
@@ -254,8 +257,8 @@ hl.bind("XF86PowerOff", hl.dsp.exec_cmd([[sh -c 'case "$(jq -r ".pbtn // \"menu\
 
 -- Volume, mic, brightness, media (they also work on the lock screen)
 local held = { locked = true, repeating = true }
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), held)
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), held)
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 1%+"), held)
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 1%-"), held)
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true })
 hl.bind(K("micmute", mod .. " + U"), hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true })

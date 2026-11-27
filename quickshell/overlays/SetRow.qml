@@ -4,8 +4,9 @@ import "../common"
 
 // A labelled settings row: the label in a fixed 132px column, the control filling the rest.
 // With `pref` set to a Prefs key, a small mark at the right shows whether the value is the default:
-//   ✓  it is the default
-//   ↺  back to the default          ☆  make this value the default (asks: set default ✓ ✕)
+//   check  it is the default
+//   undo   back to the default      star  make this value the default (asks: set default, check / cross)
+// Line icons (Icons.qml), not text symbols: the font has no glyphs for those and squashes them.
 RowLayout {
     id: row
     property string label
@@ -17,13 +18,21 @@ RowLayout {
     spacing: 12
     onIsDefChanged: if (isDef) asking = false
 
-    component Mark: Text {
+    component Mark: Item {
         id: mark
+        property string icon
         property string tip
         signal clicked()
-        font { family: Theme.fontFamily; pixelSize: 13 }
-        color: markArea.containsMouse ? Theme.fg : Theme.accent
-        MouseArea { id: markArea; anchors { fill: parent; margins: -3 } hoverEnabled: true; onClicked: mark.clicked() }
+        implicitWidth: 16
+        implicitHeight: 16
+        Icon {
+            anchors.centerIn: parent
+            path: mark.icon
+            size: 14
+            stroke: 2
+            color: markArea.containsMouse ? Theme.fg : Theme.accent
+        }
+        MouseArea { id: markArea; anchors { fill: parent; margins: -4 } hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mark.clicked() }
     }
 
     Text {
@@ -42,21 +51,24 @@ RowLayout {
         visible: row.pref !== ""
         Layout.alignment: Qt.AlignVCenter
         spacing: 8
-        Text {
+        Icon {
             visible: row.isDef
-            text: "✓"
-            font { family: Theme.fontFamily; pixelSize: 13 }
+            anchors.verticalCenter: parent.verticalCenter
+            path: Icons.check
+            size: 14
+            stroke: 2
             color: Theme.muted
         }
-        Mark { visible: !row.isDef && !row.asking; text: "↺"; onClicked: Prefs.reset(row.pref) }
-        Mark { visible: !row.isDef && !row.asking; text: "☆"; onClicked: row.asking = true }
+        Mark { visible: !row.isDef && !row.asking; icon: Icons.undo; onClicked: Prefs.reset(row.pref) }
+        Mark { visible: !row.isDef && !row.asking; icon: Icons.star; onClicked: row.asking = true }
         Text {
             visible: row.asking
+            anchors.verticalCenter: parent.verticalCenter
             text: "set default"
             font { family: Theme.fontFamily; pixelSize: 11 }
             color: Theme.dim
         }
-        Mark { visible: row.asking; text: "✓"; onClicked: { Prefs.makeDefault(row.pref); row.asking = false } }
-        Mark { visible: row.asking; text: "✕"; onClicked: row.asking = false }
+        Mark { visible: row.asking; icon: Icons.check; onClicked: { Prefs.makeDefault(row.pref); row.asking = false } }
+        Mark { visible: row.asking; icon: Icons.cross; onClicked: row.asking = false }
     }
 }

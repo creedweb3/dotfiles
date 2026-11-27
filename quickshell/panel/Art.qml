@@ -1,11 +1,13 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import "../common"
 
 // Cover art of the current track; the wallpaper stands in when the player has none.
 // Settings > Panels > media player (Prefs.mstyle):
 //   poster  the cover fills the square (default)
-//   disc    a round cover in an accent ring, turning while music plays
+//   disc    a CD: the cover printed on a round disc in an accent ring, a clear hub in the
+//           middle and a fixed sheen, turning while music plays; no square behind it
 //   vinyl   a black record with the cover as its label, turning while music plays, a texture
 //           pressed into it (Settings > Panels > vinyl, Prefs.vtex: auto picks one per track
 //           title) and a tonearm that swings onto the record while playing
@@ -13,8 +15,13 @@ Rectangle {
     id: root
 
     readonly property string art: Sys.player && Sys.player.trackArtUrl ? Sys.player.trackArtUrl : Theme.wallpaperPath ? "file://" + Theme.wallpaperPath : ""
-    readonly property string style: Prefs.mstyle
+    // thumbnails (the dashboard's 40px one) are too small for a record and its tonearm: a small CD
+    readonly property bool small: Math.min(width, height) < 90
+    readonly property string style: small ? "disc" : Prefs.mstyle
     readonly property bool playing: Sys.player !== null && Sys.player.isPlaying
+    // something to print on the disc: the track's cover, else the wallpaper (nothing playing gets
+    // the same picture disc with the wallpaper on it)
+    readonly property bool hasArt: art !== ""
     readonly property string title: Sys.player ? Sys.player.trackTitle || "" : ""
 
     // vinyl texture; "auto" until Prefs has the vtex setting
@@ -28,7 +35,8 @@ Rectangle {
     }
     readonly property string texture: vtex === "auto" ? textures[seed % textures.length] : vtex
 
-    color: Theme.panel
+    // only the poster fills its square; the disc and the record stand on the glass behind them
+    color: style === "poster" ? Theme.panel : "transparent"
     clip: true
 
     Image {
@@ -45,7 +53,7 @@ Rectangle {
     Item {
         id: round
         visible: root.style !== "poster"
-        readonly property real d: Math.min(root.width, root.height) * 0.86
+        readonly property real d: Math.min(root.width, root.height) * (root.small ? 1 : root.style === "disc" ? 0.96 : 0.86)
         width: d
         height: d
         anchors.centerIn: parent
@@ -173,20 +181,33 @@ Rectangle {
             }
         }
 
-        // disc: an accent ring
+
+        // disc with no player: a blank dark disc with a few grooves, not the wallpaper as a cover
         Rectangle {
-            visible: root.style === "disc"
+            visible: root.style === "disc" && !root.hasArt
             anchors.fill: parent
             radius: width / 2
-            color: "transparent"
-            border.width: 2
-            border.color: Theme.accent
+            color: Theme.panel
+            Repeater {
+                model: 3
+                Rectangle {
+                    required property int index
+                    anchors.centerIn: parent
+                    width: parent.width * (0.86 - index * 0.14)
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Theme.alpha(Theme.fg, 0.08)
+                }
+            }
         }
 
         // the cover, cut round: full size inside the ring (disc), a label (vinyl)
         Item {
             id: cover
-            readonly property real d: root.style === "vinyl" ? round.d * 0.4 : round.d - 12
+            // vinyl: a picture disc, the cover over the whole record; a small plain label when idle
+            readonly property real d: root.style === "vinyl" && !root.hasArt ? round.d * 0.46 : round.d
             width: d
             height: d
             anchors.centerIn: parent
@@ -210,20 +231,141 @@ Rectangle {
                 layer.enabled: true
             }
             MultiEffect {
+                visible: root.hasArt   // no cover: none (the wallpaper cut small reads as a broken image)
                 anchors.fill: parent
                 source: coverImg
                 maskEnabled: true
                 maskSource: coverMask
             }
-            // spindle hole
+            // vinyl with no player: a plain label in the palette
             Rectangle {
-                visible: root.style === "vinyl"
+                visible: root.style === "vinyl" && !root.hasArt
+                anchors.fill: parent
+                radius: width / 2
+                color: Theme.alpha(Theme.accent, 0.22)
+                border.width: 1
+                border.color: Theme.alpha(Theme.accent, 0.5)
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width * 0.62
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Theme.alpha(Theme.fg, 0.15)
+                }
+            }
+            // disc: the clear hub of a CD, a faint inner ring, then the hole
+            Rectangle {
+                visible: root.style === "disc"
+                anchors.centerIn: parent
+                width: parent.width * 0.34
+                height: width
+                radius: width / 2
+                color: "transparent"
+                border.width: 1
+                border.color: Theme.alpha(Theme.fg, 0.18)
+            }
+            Rectangle {
+                visible: root.style === "disc"
+                anchors.centerIn: parent
+                width: parent.width * 0.24
+                height: width
+                radius: width / 2
+                color: Theme.alpha(Theme.bg, 0.72)
+                border.width: 1
+                border.color: Theme.alpha(Theme.fg, 0.3)
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width * 0.42
+                    height: width
+                    radius: width / 2
+                    color: Theme.bg
+                    border.width: 1
+                    border.color: Theme.alpha(Theme.accent, 0.6)
+                }
+            }
+            // vinyl picture disc (a song with a cover): the art edge to edge, a thin dark pressed
+            // rim, a small light centre hole; no label
+            Rectangle {
+                visible: root.style === "vinyl" && root.hasArt
+                anchors.fill: parent
+                radius: width / 2
+                color: "transparent"
+                border.width: Math.max(2, parent.width * 0.018)
+                border.color: Qt.rgba(0, 0, 0, 0.55)
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: parent.border.width
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                }
+            }
+            Rectangle {
+                visible: root.style === "vinyl" && root.hasArt
+                anchors.centerIn: parent
+                width: Math.max(5, parent.width * 0.045)
+                height: width
+                radius: width / 2
+                color: "#c9c9cc"
+                border.width: 1
+                border.color: Qt.rgba(0, 0, 0, 0.35)
+            }
+            // spindle hole (blank record)
+            Rectangle {
+                visible: root.style === "vinyl" && !root.hasArt
                 anchors.centerIn: parent
                 width: 6
                 height: 6
                 radius: 3
                 color: "#101012"
             }
+        }
+    }
+
+    // disc and picture disc: light catching the disc (fixed while it turns); the disc's accent rim
+    Item {
+        visible: root.style === "disc" || (root.style === "vinyl" && root.hasArt)
+        anchors.centerIn: parent
+        width: round.d
+        height: round.d
+
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: "transparent"
+                fillGradient: ConicalGradient {
+                    centerX: round.d / 2
+                    centerY: round.d / 2
+                    angle: 30
+                    GradientStop { position: 0.00; color: "transparent" }
+                    GradientStop { position: 0.10; color: Qt.rgba(1, 1, 1, 0.16) }
+                    GradientStop { position: 0.20; color: "transparent" }
+                    GradientStop { position: 0.50; color: "transparent" }
+                    GradientStop { position: 0.60; color: Qt.rgba(1, 1, 1, 0.10) }
+                    GradientStop { position: 0.70; color: "transparent" }
+                    GradientStop { position: 1.00; color: "transparent" }
+                }
+                PathAngleArc {
+                    centerX: round.d / 2
+                    centerY: round.d / 2
+                    radiusX: round.d / 2
+                    radiusY: round.d / 2
+                    startAngle: 0
+                    sweepAngle: 360
+                }
+            }
+        }
+        Rectangle {
+            visible: root.style === "disc"
+            anchors.fill: parent
+            radius: width / 2
+            color: "transparent"
+            border.width: root.small ? 1.5 : 2
+            border.color: !root.hasArt ? Theme.muted : Theme.accent
         }
     }
 
@@ -235,7 +377,8 @@ Rectangle {
         readonly property real len: Math.min(root.width, root.height) * 0.62
         x: root.width - 12
         y: 12
-        rotation: root.playing ? 26 : 2
+        // playing: the head rests on the outer grooves, not deep toward the label
+        rotation: root.playing ? 17 : 2
         transformOrigin: Item.TopLeft
 
         Behavior on rotation {

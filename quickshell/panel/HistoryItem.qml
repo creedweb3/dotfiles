@@ -55,11 +55,21 @@ Item {
                 font.letterSpacing: 1
                 elide: Text.ElideRight
             }
-            Link {
+            Icon {
                 anchors.right: parent.right
-                text: "✕"
-                font.pixelSize: Theme.smallSize
-                onClicked: Notifs.dismiss(root.n)
+                anchors.verticalCenter: parent.verticalCenter
+                path: Icons.cross
+                size: 11
+                stroke: 2.4
+                color: dismissArea.containsMouse ? Theme.accent : Theme.dim
+                MouseArea {
+                    id: dismissArea
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Notifs.dismiss(root.n)
+                }
             }
         }
 

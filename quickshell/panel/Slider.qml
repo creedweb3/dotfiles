@@ -10,7 +10,7 @@ Item {
     property real value: 0
     property real from: 0
     property real to: 100
-    property real step: 5
+    property real step: 1   // 1% per wheel notch or drag step (volume, brightness)
     property real dragValue: 0
     readonly property bool pressed: mouse.pressed
     readonly property real shown: pressed ? dragValue : value

@@ -28,10 +28,8 @@ PanelWindow {
         left: true
         right: true
     }
-    // start under the bar strip, so the bar is neither dimmed nor covered
-    margins {
-        top: Theme.barTop * 2 + Theme.barHeight
-    }
+    // the whole screen: the dim and blur run behind the bar too, so there is no bright band
+    // around it; the bar rises above this layer while it is open (Bar.qml)
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
 
@@ -99,6 +97,10 @@ PanelWindow {
         target: "panel"
         function toggle(): void {
             Popup.toggle("panel");
+        }
+        // open the quick panel on its media tab
+        function media(): void {
+            Popup.open("panel", "media");
         }
         // the system tab, on one card's detail view (cpu, mem, gpu, disk, net) or "" for all
         function system(view: string): void {
