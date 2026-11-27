@@ -219,7 +219,22 @@ hl.bind(mod .. " + A", hl.dsp.exec_cmd(home .. "/.local/bin/openthx-ctl pick"))
 -- Windows
 hl.bind(K("close", mod .. " + Q"), hl.dsp.window.close())
 hl.bind(K("fullscreen", mod .. " + F"), hl.dsp.window.fullscreen({ action = "toggle" }))
-hl.bind(K("float", mod .. " + V"), hl.dsp.window.float({ action = "toggle" }))
+-- Float: a window made floating opens at 60% x 70% of the screen, centred, instead of keeping
+-- its tiled (often full-screen) size and sliding under the bar.
+hl.bind(K("float", mod .. " + V"), function()
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+    local w = hl.get_active_window()
+    if not (w and w.floating) then
+        return
+    end
+    local m = hl.get_active_monitor()
+    local mw, mh = 1920, 1080
+    if m then
+        mw, mh = m.width / (m.scale or 1), m.height / (m.scale or 1)
+    end
+    hl.dispatch(hl.dsp.window.resize({ x = math.floor(mw * 0.6), y = math.floor(mh * 0.7) }))
+    hl.dispatch(hl.dsp.window.center())
+end)
 hl.bind(mod .. " + J", hl.dsp.layout("togglesplit"))
 hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
 for _, dir in ipairs({ "left", "right", "up", "down" }) do

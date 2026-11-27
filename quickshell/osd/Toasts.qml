@@ -4,7 +4,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import "../common"
 
-// Notification pop-ups, as the demo: a stack under the bar on the right, newest on top, at
+// Notification pop-ups: a stack in the bottom left corner, newest at the bottom, at
 // most three plus "+N more". The line along the bottom is the time left; pointing at a toast
 // pauses it. Critical ones (red edge) stay until dismissed. Clicking a toast opens the centre.
 // Colour is Settings > Panels > notifications (Prefs.ntone): wallpaper tint or neutral.
@@ -19,14 +19,15 @@ PanelWindow {
     visible: Notifs.toasts.length > 0
 
     anchors {
-        top: true
-        right: true
+        bottom: true
+        left: true
     }
+    // in line with the windows' edges (Hyprland's gaps_out, which the ui scale does not touch)
     margins {
-        top: Theme.popupTop + 6
-        right: 26
+        bottom: Math.round(14 / Theme.uiScale) + 6
+        left: Math.round(14 / Theme.uiScale) + 6
     }
-    implicitWidth: 340
+    implicitWidth: 280
     implicitHeight: Math.max(1, stack.implicitHeight)
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
@@ -45,24 +46,9 @@ PanelWindow {
         width: parent.width
         spacing: 8
 
-        Repeater {
-            // ScriptModel keeps each toast's delegate (and its timer) when the list changes
-            model: ScriptModel {
-                values: root.shown
-            }
-
-            Toast {
-                required property var modelData
-                n: modelData
-                width: stack.width
-                tinted: root.tinted
-                onOpenCentre: root.openCentre()
-            }
-        }
-
         Rectangle {
             visible: root.extra > 0
-            anchors.right: parent.right
+            anchors.left: parent.left
             width: more.implicitWidth + 16
             height: 20
             color: Theme.alpha(Theme.bg, 0.8)
@@ -83,5 +69,22 @@ PanelWindow {
                 onClicked: root.openCentre()
             }
         }
+
+        Repeater {
+            // ScriptModel keeps each toast's delegate (and its timer) when the list changes
+            model: ScriptModel {
+                // newest nearest the corner
+                values: root.shown.slice().reverse()
+            }
+
+            Toast {
+                required property var modelData
+                n: modelData
+                width: stack.width
+                tinted: root.tinted
+                onOpenCentre: root.openCentre()
+            }
+        }
+
     }
 }

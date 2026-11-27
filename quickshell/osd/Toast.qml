@@ -34,9 +34,9 @@ Rectangle {
     border.color: crit ? Theme.crit : Theme.line
     clip: true
 
-    // slide in from the right
+    // slide in from the left
     opacity: 0
-    transform: Translate { id: shift; x: 24 }
+    transform: Translate { id: shift; x: -24 }
     Component.onCompleted: appear.start()
     ParallelAnimation {
         id: appear
