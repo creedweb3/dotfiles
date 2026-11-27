@@ -156,8 +156,10 @@ Rectangle {
                 elide: Text.ElideRight
             }
 
-            Row {
+            // action buttons wrap onto a new line, and a long label ends in "…"
+            Flow {
                 visible: root.n.actions.length > 0
+                width: parent.width
                 topPadding: 6
                 spacing: 6
 
@@ -166,7 +168,7 @@ Rectangle {
 
                     Rectangle {
                         required property var modelData
-                        width: actLabel.implicitWidth + 20
+                        width: Math.min(actLabel.implicitWidth + 20, parent.width)
                         height: 22
                         color: "transparent"
                         border.width: 1
@@ -175,6 +177,8 @@ Rectangle {
                         Label {
                             id: actLabel
                             anchors.centerIn: parent
+                            width: Math.min(implicitWidth, parent.width - 16)
+                            elide: Text.ElideRight
                             text: modelData.text
                             color: actMouse.containsMouse ? Theme.accent : Theme.fg
                             font.pixelSize: Theme.smallSize

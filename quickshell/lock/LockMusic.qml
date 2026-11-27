@@ -30,7 +30,23 @@ Item {
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
 
     // rows of parts; c: centred row. Same layouts as the demo's flex rows.
-    readonly property var rows: ({
+    // narrow line (big lock text in a small panel): the controls get their own centred row, so the
+    // title is not squeezed down to a few letters
+    readonly property bool narrow: width < 330 * s
+    readonly property var rows: narrow ? splitCtl(baseRows) : baseRows
+    function splitCtl(rs) {
+        const out = [];
+        for (const r of rs) {
+            if (r.p.indexOf("ctl") >= 0 && r.p.length > 1) {
+                out.push({ p: r.p.filter(x => x !== "ctl"), c: r.c });
+                out.push({ p: ["ctl"], c: true });
+            } else {
+                out.push(r);
+            }
+        }
+        return out;
+    }
+    readonly property var baseRows: ({
         line: [{ p: ["nt", "tt"], c: true }],
         eq: [{ p: ["eq", "tt", "ctl"] }],
         ticker: [{ p: ["tick", "ctl"] }],
@@ -79,7 +95,10 @@ Item {
                             readonly property bool fills: !row.modelData.c && ["tt", "tick", "wave", "spec", "mirror"].indexOf(modelData) >= 0
                             Layout.fillWidth: fills
                             Layout.maximumWidth: modelData === "tt" && row.modelData.p.indexOf("wave") >= 0 ? row.width * .55 : Number.POSITIVE_INFINITY
-                            Layout.preferredWidth: fills ? -1 : (item ? item.implicitWidth : 0)
+                            // a filling part (title, ticker, wave, bars) takes only the room the fixed
+                            // parts leave: asking for its full text width pushed the controls off the end
+                            Layout.preferredWidth: fills ? 0 : (item ? item.implicitWidth : 0)
+                            Layout.minimumWidth: 0
                             Layout.preferredHeight: item ? item.implicitHeight : 0
                             Layout.alignment: Qt.AlignVCenter
                             sourceComponent: ({ tt: ttC, nt: ntC, ctl: ctlC, eq: eqC, tick: tickC, wave: waveC, spec: specC, mirror: mirrorC })[modelData]
@@ -97,7 +116,9 @@ Item {
         Item {
             id: ttBox
             readonly property bool centred: !!(parent && parent.parent && parent.parent.parent && parent.parent.parent.modelData && parent.parent.parent.modelData.c)
-            implicitWidth: Math.min(Math.max(ttTitle.implicitWidth, ttArtist.implicitWidth), mus.width)
+            // centred rows size to the text; in a row with other parts it asks for little and fills
+            // the space they leave, so the controls never get pushed off the end
+            implicitWidth: centred ? Math.min(Math.max(ttTitle.implicitWidth, ttArtist.implicitWidth), mus.width) : 40 * mus.s
             implicitHeight: ttCol.implicitHeight
             Column {
                 id: ttCol

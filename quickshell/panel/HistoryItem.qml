@@ -89,8 +89,10 @@ Item {
             elide: Text.ElideRight
         }
 
-        Row {
+        // action links wrap onto a new line, and a long one ends in "…"
+        Flow {
             visible: root.n.actions.length > 0
+            width: parent.width
             topPadding: 4
             spacing: 12
 
@@ -99,6 +101,8 @@ Item {
 
                 Label {
                     required property var modelData
+                    width: Math.min(implicitWidth, parent.width)
+                    elide: Text.ElideRight
                     text: modelData.text
                     color: Theme.accent
                     font.underline: actMouse.containsMouse

@@ -123,12 +123,12 @@ Scope {
         } else if (m === "run") {
             sec("commands")
             commands.filter(c => (c[0] + " " + c[1]).indexOf(q) >= 0).forEach(c => out.push({
-                t: mark(c[0].slice(1), q), d: c[1], icon: icon(c[2]), hk: "↵ run",
+                t: mark(c[0].slice(1), q), d: c[1], icon: icon(c[2]), hk: "⏎ run",
                 keep: !c[3], run: c[3] || (() => powerRun("logout"))}))
         } else if (m === "emoji") {
             sec("emoji")
             emojis.filter(e => e[1].indexOf(q) >= 0).slice(0, 80).forEach(e => out.push({
-                t: mark(e[1], q), d: "emoji", glyph: e[0], hk: "↵ copy", run: () => copy(e[0])}))
+                t: mark(e[1], q), d: "emoji", glyph: e[0], hk: "⏎ copy", run: () => copy(e[0])}))
         } else if (m === "clip") {
             sec("clipboard")
             const now = Date.now()
@@ -136,14 +136,14 @@ Scope {
                 const id = c.slice(0, c.indexOf("\t")), text = c.slice(c.indexOf("\t") + 1), kind = LR.clipKind(text)
                 out.push({t: mark(text, q), d: clipSeen[id] ? LR.ago(now - clipSeen[id]) : "",
                     swatch: kind === "swatch" ? text : "", icon: kind === "swatch" ? "" : icon(LR.CLIP_ICONS[kind]),
-                    hk: "↵ copy", run: () => clipCopy(c)})
+                    hk: "⏎ copy", run: () => clipCopy(c)})
             })
         } else if (m === "power") {
             sec("power")
             power.filter(p => p[1].indexOf(q) >= 0).forEach(p => {
                 const on = armed === p[0]
-                out.push({t: mark(p[1], q), d: on ? "press ↵ again to " + p[1] : p[2], icon: icon(p[3]),
-                    hk: on ? "↵ confirm" : p[4] ? "↵↵" : "↵", risky: p[4], armed: on, keep: true, run: () => powerRun(p[0])})
+                out.push({t: mark(p[1], q), d: on ? "press ⏎ again to " + p[1] : p[2], icon: icon(p[3]),
+                    hk: on ? "⏎ confirm" : p[4] ? "⏎⏎" : "⏎", risky: p[4], armed: on, keep: true, run: () => powerRun(p[0])})
             })
         }
         let n = 0
@@ -152,7 +152,7 @@ Scope {
     }
     function byName(a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 }
     function appRow(e) {
-        return {t: mark(e.name, q), d: e.genericName || e.comment || "", icon: icon(e.icon), hk: "↵ open  →", entry: e, run: () => launch(e)}
+        return {t: mark(e.name, q), d: e.genericName || e.comment || "", icon: icon(e.icon), hk: "⏎ open  →", entry: e, run: () => launch(e)}
     }
 
     // ---- smart input (demo smartRows): the first kind that fits wins: path, link, colour, sum, command
@@ -166,14 +166,14 @@ Scope {
             const abs = LR.absPath(p, home)
             if (f.kind === "dir") {
                 const dp = p.endsWith("/") ? p : p + "/", da = LR.absPath(dp, home)
-                row(dp, "open in yazi", "folder-open", "↵ open", () => run(["kitty", "-e", "yazi", da]))
+                row(dp, "open in yazi", "folder-open", "⏎ open", () => run(["kitty", "-e", "yazi", da]))
                 row("open in file manager", "the default app for folders", "system-file-manager", "", () => run(["xdg-open", da]))
                 row("open kitty here", "terminal in this folder", "utilities-terminal", "", () => run(["kitty", "--directory", da]))
                 row("copy path", dp, "edit-copy", "", () => copy(dp))
                 f.entries.slice(0, 40).forEach(e => fillRow(rows, dp + e, e, "in " + dp, e.endsWith("/") ? "folder" : LR.fileIcon(e)))
             } else if (f.kind === "file") {
                 const dir = LR.dirOf(p)
-                row(p, "open with the default app", LR.fileIcon(p), "↵ open", () => run(["xdg-open", abs]))
+                row(p, "open with the default app", LR.fileIcon(p), "⏎ open", () => run(["xdg-open", abs]))
                 row("show in folder", dir, "folder-open", "", () => run(["kitty", "-e", "yazi", abs]))
                 row("open in editor", "$EDITOR (nvim)", "accessories-text-editor", "", () => run(["sh", "-c", "exec kitty -e \"${EDITOR:-nvim}\" \"$1\"", "sh", abs]))
                 row("copy path", p, "edit-copy", "", () => copy(p))
@@ -192,19 +192,19 @@ Scope {
             }
         } else if (LR.isUrl(t)) {
             const u = LR.fullUrl(t)
-            row(t, "open in the browser", "web-browser", "↵ open", () => run(["xdg-open", u]))
+            row(t, "open in the browser", "web-browser", "⏎ open", () => run(["xdg-open", u]))
             row("copy link", u, "edit-copy", "", () => copy(u))
         } else if (LR.isHex(t)) {
             const c = LR.colourForms(t)
-            ;[["copy hex", "↵ copy"], ["copy rgb", ""], ["copy hsl", ""]].forEach((x, i) =>
+            ;[["copy hex", "⏎ copy"], ["copy rgb", ""], ["copy hsl", ""]].forEach((x, i) =>
                 rows.push({t: Ui.esc(c[i]), d: x[0], swatch: c[0], hk: x[1], run: () => copy(c[i])}))
         } else if (Calc.isSum(t) && Calc.evaluate(t) !== null) {
             const sum = Calc.evaluate(t)
-            rows.push({t: "= " + sum, d: Calc.pretty(t), icon: icon("accessories-calculator"), hk: "↵ copy", big: true,
+            rows.push({t: "= " + sum, d: Calc.pretty(t), icon: icon("accessories-calculator"), hk: "⏎ copy", big: true,
                 run: () => { saveSum(t, sum); copy(sum) }})
         } else if (LR.isCommand(t)) {
             // the typed command goes to bash as one argument: it runs as typed, in a terminal that stays open
-            row(t, "run in kitty", "utilities-terminal", "↵ run", () => run(["kitty", "--hold", "bash", "-c", t]))
+            row(t, "run in kitty", "utilities-terminal", "⏎ run", () => run(["kitty", "--hold", "bash", "-c", t]))
             row("copy command", t, "edit-copy", "", () => copy(t))
         }
         return rows
@@ -234,12 +234,12 @@ Scope {
     }
     function appActions(e) {
         const cmd = Array.from(e.command).join(" ")
-        const out = [{t: "open", d: e.name, icon: icon(e.icon), hk: "↵", run: () => launch(e)}]
-        Array.from(e.actions || []).forEach(a => out.push({t: Ui.esc(a.name), d: e.name, icon: icon(a.icon || e.icon), hk: "↵", run: () => a.execute()}))
-        out.push({t: "copy launch command", d: cmd, icon: icon("edit-copy"), hk: "↵", run: () => copy(cmd)})
+        const out = [{t: "open", d: e.name, icon: icon(e.icon), hk: "⏎", run: () => launch(e)}]
+        Array.from(e.actions || []).forEach(a => out.push({t: Ui.esc(a.name), d: e.name, icon: icon(a.icon || e.icon), hk: "⏎", run: () => a.execute()}))
+        out.push({t: "copy launch command", d: cmd, icon: icon("edit-copy"), hk: "⏎", run: () => copy(cmd)})
         const wins = windowsOf(e)
         if (wins.length) out.push({t: wins.length > 1 ? "quit all windows" : "quit", d: wins.length + " open", icon: icon("window-close"),
-            hk: "↵", risky: true, run: () => wins.forEach(w => w.close())})
+            hk: "⏎", risky: true, run: () => wins.forEach(w => w.close())})
         return out
     }
     function openActs() {
@@ -768,8 +768,8 @@ Scope {
                     Layout.margins: 8
                     Layout.leftMargin: 16
                     textFormat: Text.StyledText
-                    text: (root.acting ? [["↑↓", "move"], ["↵", "run"], ["← esc", "back"]]
-                        : [["↑↓", "move"], ["↵", root.mode[0] === "calc" ? "copy" : "open"]]
+                    text: (root.acting ? [["↑↓", "move"], ["⏎", "run"], ["← esc", "back"]]
+                        : [["↑↓", "move"], ["⏎", root.mode[0] === "calc" ? "copy" : "open"]]
                             .concat(root.items[root.sel] && root.items[root.sel].entry ? [["→", "actions"]] : [])
                             .concat([["tab", root.items[root.sel] && root.items[root.sel].fill ? "complete" : "mode"], ["esc", "close"]]))
                         .map(h => "<font color=\"" + Theme.fg + "\">" + h[0] + "</font> " + h[1]).join("&nbsp;&nbsp;&nbsp;&nbsp;")

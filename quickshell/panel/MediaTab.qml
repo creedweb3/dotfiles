@@ -217,7 +217,7 @@ Column {
                 Rectangle {
                     required property var modelData
                     readonly property bool on: modelData === root.player
-                    width: chip.implicitWidth + 20
+                    width: Math.min(chip.implicitWidth + 20, 180)
                     height: 26
                     color: on ? Theme.accent : "transparent"
                     border.width: 1
@@ -226,6 +226,8 @@ Column {
                     Label {
                         id: chip
                         anchors.centerIn: parent
+                        width: Math.min(implicitWidth, parent.width - 16)
+                        elide: Text.ElideRight
                         text: parent.modelData.identity || parent.modelData.dbusName
                         color: parent.on ? Theme.bg : Theme.fg
                     }

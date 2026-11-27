@@ -88,17 +88,25 @@ Item {
     Item {
         id: box
         readonly property var bb: page.tp ? Manga.bbox(page.tp) : { x: 0, y: 0, w: page.width, h: page.height }
-        x: bb.x + bb.w * .12
-        y: bb.y + bb.h * .08
-        width: bb.w * .76
-        height: bb.h * .84
+        // The content area inside the time panel. Grid panels are plain rectangles, so it reaches
+        // the drawn border with an even padding; slanted / shattered / cut-off panels have angled
+        // corners, so it keeps the wide safe margins there.
+        readonly property bool square: Prefs.mpg === "grid"
+        readonly property real padX: square ? 22 * page.s : bb.w * .12
+        readonly property real padY: square ? 18 * page.s : bb.h * .08
+        x: bb.x + padX
+        y: bb.y + padY
+        width: bb.w - padX * 2
+        height: bb.h - padY * 2
         clip: true
 
         // the clock size only knows the panel box: shrink it until the other rows fit, then scale the block
         readonly property real fs: Math.round(Math.min(bb.w / 4.4, bb.h / 3.4, 170))
         readonly property real rest: above.implicitHeight + below.implicitHeight + 14 * page.s
         readonly property real timeSize: Math.max(Math.max(40, fs * .65), Math.min(fs, height - rest))
-        readonly property real fit: Math.min(1, height / (rest + timeSize))
+        // from the block's real height (the clock's own padding included): estimating it from the
+        // parts came out short, and the music line at the bottom got cut off by the panel edge
+        readonly property real fit: Math.min(1, (height - 8 * page.s) / Math.max(1, inner.implicitHeight))
 
         Column {
             id: inner
@@ -172,12 +180,20 @@ Item {
                     height: pwText.implicitHeight + 12 * page.s
                     color: "transparent"
                     border { width: 2; color: page.mga }
-                    Text {
-                        id: pwText
-                        anchors { left: parent.left; leftMargin: 10 * page.s; verticalCenter: parent.verticalCenter }
-                        text: page.typed + "▌"
-                        font { family: Theme.fontFamily; pixelSize: 14 * page.s; letterSpacing: 4 * page.s }
-                        color: "#f6f3ec"
+                    // the dots stay inside the box: once they reach the right edge the oldest slide
+                    // out on the left, so the cursor is always in view
+                    Item {
+                        id: pwView
+                        anchors { fill: parent; leftMargin: 10 * page.s; rightMargin: 10 * page.s }
+                        clip: true
+                        Text {
+                            id: pwText
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: Math.min(0, pwView.width - implicitWidth)
+                            text: page.typed + "▌"
+                            font { family: Theme.fontFamily; pixelSize: 14 * page.s; letterSpacing: 4 * page.s }
+                            color: "#f6f3ec"
+                        }
                     }
                     transform: Translate { id: shakeX }
                     SequentialAnimation {
@@ -195,6 +211,10 @@ Item {
                 Text {   // pam's last message (wrong password, too many tries)
                     visible: page.message !== ""
                     anchors.horizontalCenter: parent.horizontalCenter
+                    // a long PAM message ("account locked for 10 minutes…") wraps inside the panel
+                    width: Math.min(implicitWidth, parent.width * .9)
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
                     topPadding: 8 * page.s
                     text: page.message
                     font { family: Theme.fontFamily; pixelSize: 11 * page.s; letterSpacing: 1 * page.s }
