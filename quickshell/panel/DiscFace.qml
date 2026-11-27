@@ -11,6 +11,8 @@ Item {
     property string source: ""
     property bool spinning: false
     property color rim: Theme.accent
+    // a vinyl picture disc instead of a CD: no clear hub, a small light centre hole, a dark rim
+    property bool vinyl: false
 
     readonly property real d: Math.min(width, height)
 
@@ -76,8 +78,9 @@ Item {
             maskSource: mask
         }
 
-        // hub: a faint ring, the clear centre, the hole
+        // hub: a faint ring, the clear centre, the hole (CD only)
         Rectangle {
+            visible: !root.vinyl
             anchors.centerIn: parent
             width: parent.width * 0.34
             height: width
@@ -87,6 +90,7 @@ Item {
             border.color: Theme.alpha(Theme.fg, 0.2)
         }
         Rectangle {
+            visible: !root.vinyl
             anchors.centerIn: parent
             width: parent.width * 0.22
             height: width
@@ -101,6 +105,17 @@ Item {
                 radius: width / 2
                 color: Theme.bg
             }
+        }
+        // vinyl: a small light centre hole
+        Rectangle {
+            visible: root.vinyl
+            anchors.centerIn: parent
+            width: Math.max(4, parent.width * 0.07)
+            height: width
+            radius: width / 2
+            color: "#c9c9cc"
+            border.width: 1
+            border.color: Qt.rgba(0, 0, 0, 0.35)
         }
     }
 
@@ -141,7 +156,7 @@ Item {
         anchors.centerIn: parent
         radius: width / 2
         color: "transparent"
-        border.width: 2
-        border.color: root.rim
+        border.width: root.vinyl ? Math.max(1.5, root.d * 0.03) : 2
+        border.color: root.vinyl ? Qt.rgba(0, 0, 0, 0.6) : root.rim
     }
 }

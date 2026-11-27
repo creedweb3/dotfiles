@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "../common"
+import "../panel"
 
 // One notification pop-up: icon, "app · now" with a close cross, title, two lines of body,
 // action buttons, and the time-left line (paused while pointed at; none for critical ones).
@@ -12,6 +13,15 @@ Rectangle {
     readonly property bool crit: Notifs.isCritical(n)
     readonly property int life: n.expireTimeout > 0 ? n.expireTimeout * 1000 : 5000
     readonly property string pic: Notifs.iconOf(n)
+    // a track-change notification from the music app: its cover as a small record in the media
+    // player's style (Settings > Panels > media player), turning while the music plays
+    readonly property bool music: {
+        const p = Sys.player;
+        if (!p || pic === "" || Prefs.mstyle === "poster")
+            return false;
+        const app = (n.appName || "").toLowerCase(), id = (p.identity || "").toLowerCase(), de = (p.desktopEntry || "").toLowerCase();
+        return app !== "" && (app === id || app === de || id.indexOf(app) >= 0 || app.indexOf(id) >= 0 || (de !== "" && app.indexOf(de) >= 0));
+    }
     property real remain: 1           // share of the time left, 1 -> 0
 
     signal openCentre
@@ -55,7 +65,17 @@ Rectangle {
         width: parent.width - 24
         spacing: 10
 
+        DiscFace {
+            visible: root.music
+            width: 44
+            height: 44
+            source: root.music ? root.pic : ""
+            vinyl: Prefs.mstyle === "vinyl"
+            spinning: root.music && Sys.player !== null && Sys.player.isPlaying
+        }
+
         Rectangle {
+            visible: !root.music
             width: 32
             height: 32
             color: "transparent"
@@ -83,7 +103,7 @@ Rectangle {
         }
 
         Column {
-            width: parent.width - 42
+            width: parent.width - (root.music ? 54 : 42)
             spacing: 2
 
             Item {
