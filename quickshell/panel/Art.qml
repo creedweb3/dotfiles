@@ -222,6 +222,8 @@ Rectangle {
                 sourceSize: Qt.size(cover.width * 2, cover.height * 2)
                 visible: false
                 layer.enabled: true
+                layer.smooth: true
+                layer.textureSize: Qt.size(cover.width * 2, cover.height * 2)   // 2x: stays sharp when scaled and spun
             }
             Rectangle {
                 id: coverMask
@@ -229,6 +231,8 @@ Rectangle {
                 radius: width / 2
                 visible: false
                 layer.enabled: true
+                layer.smooth: true
+                layer.textureSize: Qt.size(cover.width * 2, cover.height * 2)   // 2x: stays sharp when scaled and spun
             }
             MultiEffect {
                 visible: root.hasArt   // no cover: none (the wallpaper cut small reads as a broken image)
@@ -236,6 +240,8 @@ Rectangle {
                 source: coverImg
                 maskEnabled: true
                 maskSource: coverMask
+                maskThresholdMin: 0.5   // feather the round edge instead of stair-stepping
+                maskSpreadAtMin: 1.0
             }
             // vinyl with no player: a plain label in the palette
             Rectangle {
@@ -306,12 +312,12 @@ Rectangle {
             Rectangle {
                 visible: root.style === "vinyl" && root.hasArt
                 anchors.centerIn: parent
-                width: Math.max(5, parent.width * 0.045)
+                width: Math.max(6, parent.width * 0.06)
                 height: width
                 radius: width / 2
-                color: "#c9c9cc"
+                color: Qt.rgba(0, 0, 0, 0.78)   // centre: the cover, dimmed to read as a hole
                 border.width: 1
-                border.color: Qt.rgba(0, 0, 0, 0.35)
+                border.color: Qt.rgba(1, 1, 1, 0.25)
             }
             // spindle hole (blank record)
             Rectangle {

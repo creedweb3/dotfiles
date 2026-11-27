@@ -62,6 +62,8 @@ Item {
             sourceSize: Qt.size(root.d * 2, root.d * 2)
             visible: false
             layer.enabled: true
+            layer.smooth: true
+            layer.textureSize: Qt.size(root.d * 2, root.d * 2)   // 2x: stays sharp when scaled and spun
         }
         Rectangle {
             id: mask
@@ -69,6 +71,8 @@ Item {
             radius: width / 2
             visible: false
             layer.enabled: true
+            layer.smooth: true
+            layer.textureSize: Qt.size(root.d * 2, root.d * 2)   // 2x: stays sharp when scaled and spun
         }
         MultiEffect {
             visible: root.source !== ""
@@ -76,6 +80,8 @@ Item {
             source: img
             maskEnabled: true
             maskSource: mask
+            maskThresholdMin: 0.5   // feather the round edge instead of stair-stepping
+            maskSpreadAtMin: 1.0
         }
 
         // hub: a faint ring, the clear centre, the hole (CD only)
