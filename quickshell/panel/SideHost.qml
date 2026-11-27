@@ -18,8 +18,15 @@ PanelWindow {
     screen: Quickshell.screens.find(s => s.name === Popup.sideScreen)
         ?? Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name)
         ?? Quickshell.screens[0]
-    // kept shown until the closing pixel un-build is done
-    visible: open || content.opacity > 0 || reveal.busy
+    // Always mapped, empty and click-through while closed: opening then draws into a window that
+    // already exists, so there is no Hyprland fade-in, no flash of the bar under the dim, and it
+    // opens a little sooner. `live` is when it is on screen (closing animation included).
+    readonly property bool live: open || content.opacity > 0 || reveal.busy
+    visible: true
+    mask: live ? null : noInput
+    Region {
+        id: noInput
+    }
 
     anchors {
         top: true
@@ -40,7 +47,7 @@ PanelWindow {
     Binding {
         target: Popup
         property: "sideShown"
-        value: host.visible
+        value: host.live
     }
 
     Connections {
@@ -61,15 +68,16 @@ PanelWindow {
         opacity: host.open || reveal.busy ? 1 : 0
         focus: true
 
-        Behavior on opacity {
-            NumberAnimation { duration: 150 }
-        }
-
         Keys.onEscapePressed: Popup.close()
 
         Rectangle {
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, Prefs.scrimAlpha)
+            // fades out while the panel un-builds, not after it
+            opacity: host.open ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
 
             MouseArea {
                 anchors.fill: parent
@@ -77,8 +85,8 @@ PanelWindow {
             }
         }
 
-        // pixel build, spreading from the bar box that opened it
-        PixelReveal {
+        // slides down out from under the bar and/or pixel-builds (PanelReveal, Settings > Panels > open motion)
+        PanelReveal {
             id: reveal
             y: Theme.popupTop - host.margins.top
             x: host.shownSide === "nc" ? Theme.barSide
@@ -91,7 +99,7 @@ PanelWindow {
                 id: loader
                 // a fresh pop-up each time it opens (after the last one faded), so the centre
                 // resets its month and marks everything read
-                active: host.visible
+                active: host.live
                 sourceComponent: host.shownSide === "nc" ? centre : small
                 layer.enabled: Prefs.shadow
                 layer.effect: PanelShadow {}

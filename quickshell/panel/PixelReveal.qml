@@ -15,6 +15,11 @@ Item {
     property real tile: 22
     property int duration: 600
     property real progress: 1          // 0 nothing, 1 fully built
+    // the bar: start this frame with a fast-start curve, so it answers the mouse at once
+    // (panels wait a frame and ease in, which reads better for a big panel)
+    property bool instant: false
+    // closing time as a share of the opening time
+    property real closeShare: instant ? 1 : 0.6
 
     readonly property int cols: Math.max(1, Math.ceil(width / tile))
     readonly property int rows: Math.max(1, Math.ceil(height / tile))
@@ -26,20 +31,32 @@ Item {
 
     property bool pending: false   // play() called, starting next frame
 
+    // Taps can come faster than the animation: each call carries on from where it is, in the new
+    // direction, at the same speed, so rapid open / close never restarts or drops a tap.
     function unplay() {
         build.stop();
         pending = false;
         unbuild.from = progress;
-        unbuild.duration = Math.round(root.duration * 0.6 * progress);
+        // the bar mirrors its build (same time, same fast start); panels close quicker than they open
+        unbuild.duration = Math.max(1, Math.round(root.duration * root.closeShare * progress));
         unbuild.start();
     }
 
     function play() {
+        const reversing = unbuild.running || build.running;
         build.stop();
         unbuild.stop();
-        progress = 0;
+        if (!reversing)
+            progress = 0;   // a fresh open: start from nothing (the value left from last time is stale)
+        build.from = progress;
+        build.duration = Math.max(1, Math.round(root.duration * (1 - progress)));
+        if (instant || reversing) {
+            pending = false;
+            build.start();
+            return;
+        }
         pending = true;
-        // start on the next frame, once the hidden panel and its squares are drawn at 0
+        // a fresh panel: start on the next frame, once it and its squares are drawn at 0
         Qt.callLater(() => {
             if (!root.pending)
                 return;
@@ -52,12 +69,10 @@ Item {
         id: build
         target: root
         property: "progress"
-        from: 0
         to: 1
-        duration: root.duration
         // even speed from the first square to the last (a fast-start curve made it look like it
         // began halfway)
-        easing.type: Easing.InOutSine
+        easing.type: root.instant ? Easing.OutCubic : Easing.InOutSine
     }
 
     NumberAnimation {
@@ -65,20 +80,33 @@ Item {
         target: root
         property: "progress"
         to: 0
-        easing.type: Easing.InOutSine
+        easing.type: root.instant ? Easing.OutCubic : Easing.InOutSine
     }
 
+    // The content is drawn normally (sharp) while built. While building or un-building it is hidden
+    // and shown through the mask instead. The effect below is made once and kept, only hidden:
+    // switching an effect on builds its shader on the spot, which froze the first frames of closing.
     Item {
         id: holder
         anchors.fill: parent
-        layer.enabled: root.progress < 1
-        layer.textureSize: Qt.size(Math.ceil(width * Theme.uiScale), Math.ceil(height * Theme.uiScale))
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: mask
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 0.0
-        }
+    }
+    ShaderEffectSource {
+        id: snap
+        anchors.fill: holder
+        sourceItem: holder
+        hideSource: root.progress < 1
+        live: root.progress < 1
+        visible: false
+        textureSize: Qt.size(Math.ceil(width * Theme.uiScale), Math.ceil(height * Theme.uiScale))
+    }
+    MultiEffect {
+        anchors.fill: holder
+        source: snap
+        visible: root.progress < 1
+        maskEnabled: true
+        maskSource: mask
+        maskThresholdMin: 0.5
+        maskSpreadAtMin: 0.0
     }
 
     Item {
@@ -86,7 +114,9 @@ Item {
         width: root.width
         height: root.height
         visible: false
-        layer.enabled: root.progress < 1
+        // the square mask stays rendered and ready (it never changes while the panel is open), so
+        // closing starts on the very next frame instead of first rebuilding it
+        layer.enabled: true
 
         Repeater {
             // always made, so none are still being created when the build starts

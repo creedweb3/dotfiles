@@ -41,10 +41,13 @@ Singleton {
         return all.slice(0, Math.max(1, Math.min(3, arcs))).join("") + "M11.4 19.5a.6 .6 0 1 0 1.2 0a.6 .6 0 1 0-1.2 0" + (off ? slash : "");
     }
 
-    // Speaker with waves by level, as the demo: none below 34%, one to 66%, two above.
+    // the bar's volume: one wave up to 30%, two up to 70%, three above (speaker moved left for room)
+    readonly property string volw1: "M2 9h4l5-4v14l-5-4H2zM14.5 10a2.5 2.5 0 0 1 0 4"
+    readonly property string volw2: "M2 9h4l5-4v14l-5-4H2zM14.5 10a2.5 2.5 0 0 1 0 4M17 7.5a6 6 0 0 1 0 9"
+    readonly property string volw3: "M2 9h4l5-4v14l-5-4H2zM14.5 10a2.5 2.5 0 0 1 0 4M17 7.5a6 6 0 0 1 0 9M19.5 5a9.5 9.5 0 0 1 0 14"
     function volume(level, isMuted) {
         if (isMuted || level <= 0)
             return volx;
-        return level >= 67 ? vol : level >= 34 ? vol1 : vol0;
+        return level >= 70 ? volw3 : level >= 30 ? volw2 : volw1;
     }
 }

@@ -19,6 +19,10 @@ Singleton {
     readonly property var spec: ({
         marker: ["dimframe", ["frame", "dim", "dimframe", "fill"]],
         gap: [6, 2, 14],
+        // bar auto-hide: slides up off the screen, back when the mouse touches the top edge
+        // auto: windows get the full height; when the mouse touches the top edge (or briefly on a
+        // workspace switch) the bar builds in and windows shrink smoothly to make room
+        bhide: ["off", ["off", "auto"]],
         // size of the whole shell (bar, panels, pop-ups); scripts/rice-shell starts Quickshell with
         // QT_SCALE_FACTOR from it. auto: from the screen height (1080p -> 125%, 1440p -> 150%)
         uiscale: ["auto", ["auto", "100", "125", "150", "175", "200"]],
@@ -30,6 +34,8 @@ Singleton {
         rsel: ["arrow", ["bar", "fill", "arrow"]],
         rmatch: ["accent", ["accent", "bold"]],
         mstyle: ["vinyl", ["disc", "poster", "vinyl"]],
+        // how panels and pop-ups open (panel/PanelReveal.qml)
+        panim: ["both", ["slide", "pixel", "both"]],
         vtex: ["auto", ["auto", "smoke", "nebula", "ink", "lava", "frost"]],
         slook: ["lined", ["plain", "soft", "lined", "tab"]],
         ntone: ["tinted", ["tinted", "neutral"]],
@@ -138,6 +144,7 @@ Singleton {
     // bar
     readonly property string marker: valid("marker", adapter.marker)
     readonly property int gap: valid("gap", adapter.gap)
+    readonly property string bhide: valid("bhide", adapter.bhide)
     readonly property string uiscale: valid("uiscale", adapter.uiscale)
     readonly property string anim: valid("anim", adapter.anim)
     readonly property string sysic: valid("sysic", adapter.sysic)
@@ -148,6 +155,7 @@ Singleton {
     readonly property string rsel: valid("rsel", adapter.rsel)
     readonly property string rmatch: valid("rmatch", adapter.rmatch)
     readonly property string mstyle: valid("mstyle", adapter.mstyle)
+    readonly property string panim: valid("panim", adapter.panim)
     readonly property string vtex: valid("vtex", adapter.vtex)
     readonly property string slook: valid("slook", adapter.slook)
     readonly property string ntone: valid("ntone", adapter.ntone)
@@ -221,6 +229,7 @@ Singleton {
             id: adapter
             property string marker: "dimframe"
             property int gap: 6
+            property string bhide: "off"
             property string uiscale: "auto"
             property string anim: "spin"
             property string sysic: "peek"
@@ -230,6 +239,7 @@ Singleton {
             property string rsel: "arrow"
             property string rmatch: "accent"
             property string mstyle: "vinyl"
+            property string panim: "both"
             property string vtex: "auto"
             property string slook: "lined"
             property string ntone: "tinted"

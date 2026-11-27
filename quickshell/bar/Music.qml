@@ -25,13 +25,6 @@ Box {
         NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
     }
 
-    Icon {
-        visible: root.idle || root.cramped
-        anchors.verticalCenter: parent.verticalCenter
-        path: Icons.music
-        size: 14
-        color: root.hovered ? Theme.accent : Theme.dim
-    }
     active: Popup.mode === "player"
 
     // marquee: the title twice side by side slides left by one copy's width, then repeats.
@@ -137,9 +130,9 @@ Box {
         color: Theme.muted
     }
 
-    // eq, at the right end: bars bounce while playing, rest low when paused
+    // eq, at the right end (alone, centred, when nothing plays or the box is cramped): the bars
+    // always hop: full height while playing, a smaller, slower hop when paused or idle
     Row {
-        visible: !root.idle && !root.cramped
         anchors.verticalCenter: parent.verticalCenter
         width: 16
         height: 13
@@ -154,15 +147,16 @@ Box {
                 width: 3
                 height: 3
                 anchors.bottom: parent.bottom
-                color: root.active || root.hovered ? Theme.accent : Theme.fg
+                color: root.active || root.hovered ? Theme.accent : root.playing ? Theme.fg : Theme.dim
+                readonly property real peak: root.playing ? 13 : 8
+                readonly property int half: root.playing ? 800 : 1100
 
                 SequentialAnimation on height {
-                    running: root.playing
+                    running: true
                     loops: Animation.Infinite
                     PauseAnimation { duration: eqBar.index * 200 }
-                    NumberAnimation { from: 3; to: 13; duration: 800; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 13; to: 3; duration: 800; easing.type: Easing.InOutSine }
-                    onRunningChanged: if (!running) eqBar.height = 3
+                    NumberAnimation { from: 3; to: eqBar.peak; duration: eqBar.half; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: eqBar.peak; to: 3; duration: eqBar.half; easing.type: Easing.InOutSine }
                 }
             }
         }

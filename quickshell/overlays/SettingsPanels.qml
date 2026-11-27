@@ -65,6 +65,15 @@ Column {
     }
 
     SetCard {
+        title: "motion"
+        PrefSeg {
+            label: "open motion"
+            key: "panim"
+            options: [["slide", "slide"], ["pixel", "pixel build"], ["both", "both"]]
+        }
+    }
+
+    SetCard {
         title: "wallpaper picker"
         PrefSeg {
             label: "look"

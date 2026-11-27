@@ -48,6 +48,22 @@ Column {
     }
 
     SetCard {
+        title: "bar"
+        PrefSeg {
+            label: "auto-hide"
+            key: "bhide"
+            options: [["off", "off"], ["auto", "on"]]
+        }
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "on: the bar hides and windows use the full height. Touch the top edge of the screen to bring it back; windows shrink smoothly to make room. It also shows for a moment when you switch workspace."
+            font { family: Theme.fontFamily; pixelSize: 11 }
+            color: Theme.dim
+        }
+    }
+
+    SetCard {
         title: "workspaces"
         PrefSeg {
             label: "open marker"

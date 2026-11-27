@@ -150,6 +150,10 @@ end
 -- special workspace fades in while it grows from 97%.
 hl.curve("soft", { type = "bezier", points = { { 0.3, 0 }, { 0.2, 1 } } })
 hl.animation({ leaf = "windows", enabled = true, speed = 2.5, bezier = "soft", style = "popin 97%" })
+-- Moves and resizes start fast and settle (matches the bar's 200ms auto-hide build): the soft
+-- curve's slow start read as lag when windows make room for the bar.
+hl.curve("snap", { type = "bezier", points = { { 0.22, 1 }, { 0.36, 1 } } })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "snap" })
 hl.animation({ leaf = "border", enabled = true, speed = 2, bezier = "default" })
 hl.animation({ leaf = "fade", enabled = true, speed = 2, bezier = "default" })
 hl.animation({ leaf = "layers", enabled = true, speed = 2.5, bezier = "soft", style = "fade" })
