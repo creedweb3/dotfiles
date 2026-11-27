@@ -7,7 +7,7 @@ import "../common"
 Item {
     id: root
 
-    readonly property real r: 22
+    readonly property real r: 20
     readonly property bool hovered: mouse.containsMouse
     readonly property color edge: hovered || Popup.mode === "panel" ? Theme.accent : Theme.line
 
@@ -49,9 +49,10 @@ Item {
 
     // the disc with the symbol, centred on the seam between the two boxes
     Rectangle {
-        width: 32
-        height: 32
-        radius: 16
+        // 28 px keeps the ring inside the 30 px bar (32 clipped its top and bottom)
+        width: 28
+        height: 28
+        radius: 14
         x: left.width - width / 2
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.alpha(Theme.panel, 0.9)
