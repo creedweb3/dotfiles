@@ -38,7 +38,9 @@ PanelWindow {
         left: Math.floor(Theme.barSide)
         right: Math.floor(Theme.barSide)
     }
-    implicitHeight: autoHide ? Theme.barTop + Theme.barHeight : Theme.barHeight + topInset
+    // Whole units, rounded up: the layer's size is cut down to whole units (25.6 -> 25 = 31px), which
+    // dropped the boxes' last row. The extra fraction below the boxes is transparent.
+    implicitHeight: Math.ceil(autoHide ? Theme.barTop + Theme.barHeight : Theme.barHeight + topInset)
     // Shown, it takes its space so windows shrink to make room (nothing is covered); hidden, they
     // grow back into the full height. Both ways the space changes as the 200ms pixel build or
     // un-build starts, so Hyprland's window animation runs alongside it and reads as one motion.
@@ -238,7 +240,10 @@ PanelWindow {
 
     Row {
         id: centreRow
-        anchors.centerIn: parent
+        // centred on whole pixels: anchors.centerIn put it on a half pixel, which smeared the
+        // centre boxes' outer borders (4px / 2px at a 3px border, caught by rice-gapcheck)
+        x: Theme.centre(parent.width, width)
+        y: Theme.centre(parent.height, height)
         spacing: Theme.gap
 
         Repeater {
