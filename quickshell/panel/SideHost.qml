@@ -15,15 +15,24 @@ PanelWindow {
     // keeps the last pop-up drawn while it fades out
     property string shownSide: "nc"
 
-    screen: Quickshell.screens.find(s => s.name === Popup.sideScreen)
-        ?? Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name)
-        ?? Quickshell.screens[0]
+    // picks its screen only while closed: once open it stays put until it has gone
+    Binding on screen {
+        when: !host.live
+        value: Quickshell.screens.find(s => s.name === Popup.sideScreen)
+            ?? Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name)
+            ?? Quickshell.screens[0]
+        restoreMode: Binding.RestoreNone
+    }
+    // a move maps the window again, on top of its layer: let the bars rise back above it (Bar.qml)
+    onScreenChanged: Popup.hostMoved()
     // Always mapped, empty and click-through while closed: opening then draws into a window that
     // already exists, so there is no Hyprland fade-in, no flash of the bar under the dim, and it
     // opens a little sooner. `live` is when it is on screen (closing animation included).
     readonly property bool live: open || content.opacity > 0 || reveal.busy
     visible: true
-    mask: live ? null : noInput
+    // only takes the mouse while open: during the closing animation (or if it ever stuck) clicks pass
+    // through, so a pop-up that is going away can never swallow the bar or the desktop
+    mask: open ? null : noInput
     Region {
         id: noInput
     }

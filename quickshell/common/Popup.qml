@@ -19,6 +19,8 @@ Singleton {
     // still on screen (open, or playing its closing animation): the bar stays above them till then
     property bool panelShown: false
     property bool sideShown: false
+    // a pop-up window moved to another screen and was mapped again, on top of the bars
+    signal hostMoved()
 
     onModeChanged: if (mode !== "") side = ""
     onSideChanged: if (side !== "") mode = ""

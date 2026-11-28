@@ -76,6 +76,22 @@ PanelWindow {
     // the panel windows are always mapped (PanelHost / SideHost), so the bar can rise at once and
     // still land on top of them: no frame with the bar under the dim
     onPopupOpenChanged: bar.raised = popupOpen
+    // A pop-up window that moves screen is mapped again and lands above a raised bar, covering it
+    // with the dim. Step down for a frame and rise again, so the bar joins the layer on top.
+    Connections {
+        target: Popup
+        function onHostMoved() {
+            if (!bar.raised)
+                return;
+            bar.raised = false;
+            reRaise.restart();
+        }
+    }
+    Timer {
+        id: reRaise
+        interval: 16
+        onTriggered: bar.raised = bar.popupOpen
+    }
 
     readonly property var monitor: Hyprland.monitorFor(screen)
     readonly property int activeWs: monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id : Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1

@@ -49,10 +49,10 @@ Item {
 
     // the disc with the symbol, centred on the seam between the two boxes
     Rectangle {
-        // 28 px keeps the ring inside the 30 px bar (32 clipped its top and bottom)
-        width: 28
-        height: 28
-        radius: 14
+        // as tall as the boxes, which is the bar's full height: any taller and it is clipped
+        width: Theme.boxHeight
+        height: Theme.boxHeight
+        radius: width / 2
         x: left.width - width / 2
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.alpha(Theme.panel, 0.9)
@@ -62,7 +62,7 @@ Item {
         Image {
             id: symbol
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: 3
             source: Theme.symbolPath
             sourceSize: Qt.size(64, 64)
             fillMode: Image.PreserveAspectFit
@@ -99,7 +99,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: Popup.toggle("panel")
+        onPressed: Popup.toggle("panel")
         onEntered: if (Prefs.anim === "swing") swing.restart()
     }
 }

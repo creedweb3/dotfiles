@@ -18,9 +18,16 @@ Column {
     readonly property string dir: Quickshell.env("HOME") + "/Pictures/wallpapers"
     property var presets: []      // names
     property var counts: ({})     // preset -> wallpapers in its folder
+    property var groupFiles: ({}) // preset -> file names of its wallpapers
     property string presetsDir: ""
     property string preset: ""
-    property var walls: []
+    property var allWalls: []     // everything in ~/Pictures/wallpapers
+    // the arrows and the counter stay inside the current group (all of them if it has none listed)
+    readonly property var walls: {
+        const names = groupFiles[preset] || [];
+        const own = allWalls.filter(w => names.includes(w.slice(w.lastIndexOf("/") + 1)));
+        return own.length ? own : allWalls;
+    }
     readonly property int index: walls.indexOf(Theme.wallpaperPath)
 
     function setWall(path) {
@@ -46,16 +53,20 @@ Column {
     // where the presets live, and how many wallpapers each one has
     Process {
         running: true
-        command: ["sh", "-c", "d=$(readlink -f \"$HOME/.config/wallust\")/../presets; readlink -f \"$d\"; for p in \"$d\"/*/; do echo \"$(basename \"$p\") $(find \"$p/wallpapers\" -type f 2>/dev/null | wc -l)\"; done"]
+        // the presets folder, then one "<preset> <file name>" line per wallpaper
+        command: ["sh", "-c", "d=$(readlink -f \"$HOME/.config/wallust\")/../presets; readlink -f \"$d\"; for p in \"$d\"/*/; do n=$(basename \"$p\"); find \"$p/wallpapers\" -type f 2>/dev/null | while read -r f; do echo \"$n $(basename \"$f\")\"; done; done"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const lines = this.text.split("\n").filter(x => x), c = {};
+                const lines = this.text.split("\n").filter(x => x), c = {}, g = {};
                 root.presetsDir = lines.shift() || "";
                 for (const l of lines) {
-                    const m = /^(\S+) (\d+)$/.exec(l);
-                    if (m)
-                        c[m[1]] = Number(m[2]);
+                    const m = /^(\S+) (.+)$/.exec(l);
+                    if (!m)
+                        continue;
+                    (g[m[1]] = g[m[1]] || []).push(m[2]);
+                    c[m[1]] = g[m[1]].length;
                 }
+                root.groupFiles = g;
                 root.counts = c;
             }
         }
@@ -64,7 +75,7 @@ Column {
         running: true
         command: ["find", root.dir, "-type", "f", "(", "-iname", "*.jpg", "-o", "-iname", "*.jpeg", "-o", "-iname", "*.png", "-o", "-iname", "*.webp", ")"]
         stdout: StdioCollector {
-            onStreamFinished: root.walls = this.text.split("\n").filter(x => x).sort()
+            onStreamFinished: root.allWalls = this.text.split("\n").filter(x => x).sort()
         }
     }
 

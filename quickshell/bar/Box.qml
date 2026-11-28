@@ -41,7 +41,9 @@ Rectangle {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: m => root.clicked(m)
+        // react on press: a click needs press and release on the same spot, and boxes that
+        // slide open on hover can move between the two, dropping the click
+        onPressed: m => root.clicked(m)
         onWheel: w => root.scrolled(w.angleDelta.y)
     }
 }

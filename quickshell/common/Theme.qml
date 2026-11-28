@@ -38,15 +38,17 @@ Singleton {
     readonly property int smallSize: 11
     readonly property int gap: Prefs.gap  // space between bar boxes (Settings > Bar)
     readonly property int boxHeight: 26
-    readonly property int barHeight: 30
-    readonly property int barTop: 8
+    // the bar is exactly as tall as its boxes, so the boxes sit the same 14px from the screen top
+    // as from the windows below and the screen sides
+    readonly property int barHeight: boxHeight
+    readonly property real barTop: 14 / uiScale
     // in line with the windows: Hyprland's gaps_out (14px) is not scaled by the ui size, so this
     // cancels the scale out (17.5px at 125% sat 3px inside the window edges)
     readonly property real barSide: 14 / uiScale
     // Shell size (rice-shell sets QT_SCALE_FACTOR from Settings > Bar > ui size). Everything here is in
     // scaled pixels, but Hyprland's gaps are not, so they shrink by this factor in shell units.
     readonly property real uiScale: Number(Quickshell.env("QT_SCALE_FACTOR")) || 1
-    readonly property int popupTop: barTop + barHeight + Math.round(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
+    readonly property real popupTop: barTop + barHeight + Math.round(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
 
     // Bumped on every palette or symbol change, so images reload (cache busting).
     property int rev: 0
