@@ -9,7 +9,7 @@ Rectangle {
     readonly property var tabs: [["dash", "Dashboard"], ["media", "Media"], ["system", "System"], ["deck", "Deck"], ["theme", "Theme"]]
     property real tallest: 0
 
-    width: 500
+    width: Theme.snapEven(500)   // even pixels: centred with equal gaps (rice-gapcheck)
     height: Math.max(tallest, col.implicitHeight + 28)
     color: Theme.glass
     border.width: Theme.border

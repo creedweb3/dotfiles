@@ -19,7 +19,7 @@ Item {
         notchRight: true
         r: root.r
         edge: root.edge
-        width: cpuText.implicitWidth + 10 + root.r + 8
+        width: Theme.snapUp(cpuText.implicitWidth + 10 + root.r + 8)   // whole pixels (rice-gapcheck)
         height: parent.height
 
         Label {
@@ -36,7 +36,7 @@ Item {
         notchRight: false
         r: root.r
         edge: root.edge
-        width: memText.implicitWidth + root.r + 8 + 10
+        width: Theme.snapUp(memText.implicitWidth + root.r + 8 + 10)
         height: parent.height
 
         Label {
@@ -53,7 +53,7 @@ Item {
         width: Theme.boxHeight
         height: Theme.boxHeight
         radius: width / 2
-        x: left.width - width / 2
+        x: Theme.snap(left.width - width / 2)   // on a whole pixel, or the ring draws thinner than 2px
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.alpha(Theme.panel, 0.9)
         border.width: Theme.border

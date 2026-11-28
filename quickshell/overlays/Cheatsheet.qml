@@ -240,18 +240,25 @@ Scope {
     OverlayWindow {
         id: win
         name: "cheatsheet"
-        dim: 0.45
+        // no dim: the bar strip above stays undimmed, so a dimmed gap around the card read as a colour step
+        dim: 0
+        keepBar: true
         onDismissed: root.hide()
 
         Rectangle {
             id: card
-            property real topY: -1
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: topY < 0 ? Math.round((parent.height - height) / 2) : topY
-            width: root.kbWidth + 56
-            height: body.implicitHeight + 38
+            property real topY: -1   // unused now the card is fixed; kept for the search code
+            // Placed like a tiled window: below the bar (the layer stops at the bar's reserved space),
+            // with Hyprland's 14px gaps_out on every side, so the bar stays visible and the gaps match.
+            // Same numbers the bar and panels use (Theme.barSide / popupTop: Hyprland's gaps_out at the ui
+            // scale), and the window border's width and colour, so it lines up with tiled windows exactly.
+            x: Theme.barSide
+            y: Theme.popupTop - (win.screen ? win.screen.height - win.height : 0)
+            width: parent.width - 2 * Theme.barSide
+            height: parent.height - y - Theme.barSide
             color: Theme.glass
-            border.color: Theme.muted
+            border.width: Theme.border
+            border.color: Theme.line
             focus: true
             Keys.onPressed: e => root.key(e)
 
@@ -260,7 +267,8 @@ Scope {
             ColumnLayout {
                 id: body
                 x: 28; y: 22
-                width: root.kbWidth
+                width: card.width - 56
+                height: card.height - 44
                 spacing: 0
 
                 RowLayout {  // symbol, label, search
@@ -296,6 +304,7 @@ Scope {
                 }
 
                 Row {  // keyboard and arrow cluster
+                    Layout.alignment: Qt.AlignHCenter
                     spacing: 16
                     Column {
                         spacing: root.gap
@@ -327,17 +336,18 @@ Scope {
 
                 Rectangle { Layout.fillWidth: true; Layout.topMargin: 16; Layout.preferredHeight: 1; color: Ui.alpha(Theme.fg, 0.10) }
 
-                RowLayout {  // the index: three columns that end on one line
+                RowLayout {  // the index: six columns that end on one line
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
                     Layout.topMargin: 16
                     spacing: 12
                     visible: root.hits.length > 0
                     Repeater {
-                        model: [["apps", "windows"], ["workspaces", "media"], ["system"]]
+                        model: [["apps"], ["windows"], ["workspaces"], ["media"], ["system"], ["tools"]]
                         ColumnLayout {
                             id: idxCol
                             required property var modelData
-                            Layout.preferredWidth: (root.kbWidth - 24) / 3
+                            Layout.preferredWidth: (body.width - 60) / 6
                             Layout.fillHeight: true
                             Layout.alignment: Qt.AlignTop
                             spacing: 12

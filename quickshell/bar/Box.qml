@@ -16,7 +16,8 @@ Rectangle {
     signal clicked(var mouse)
     signal scrolled(real dy)
 
-    implicitWidth: row.implicitWidth + padding * 2
+    // whole screen pixels, so the boxes after this one start on a pixel and every border is equal
+    implicitWidth: Theme.snapUp(row.implicitWidth + padding * 2)
     implicitHeight: Theme.boxHeight
     color: Theme.boxFill
     border.width: Theme.border

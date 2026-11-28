@@ -284,6 +284,7 @@ EOT
     install -Dm755 scripts/rice-special "$HOME/.local/bin/rice-special"
     install -Dm755 scripts/rice-shell "$HOME/.local/bin/rice-shell"
     install -Dm755 scripts/rice-record "$HOME/.local/bin/rice-record"
+    install -Dm755 scripts/rice-gapcheck "$HOME/.local/bin/rice-gapcheck"
     # manga-frames reads the preset list from here when run from ~/.local/bin.
     sudo install -d /usr/local/share/rice && sudo cp -r presets /usr/local/share/rice/
     # boot-theme runs as root (sudo boot-theme), so it lives where sudo finds it; it loads palette-pick beside it.

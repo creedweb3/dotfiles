@@ -109,7 +109,7 @@ PanelWindow {
             id: reveal
             // top edge in line with the windows' top edges
             y: Theme.popupTop - host.margins.top
-            x: host.shownMode === "player" ? Math.max(Theme.barSide, Math.min(Popup.playerRight - width, host.width - Theme.barSide - width)) : Math.round((host.width - width) / 2)
+            x: host.shownMode === "player" ? Math.max(Theme.barSide, Math.min(Popup.playerRight - width, host.width - Theme.barSide - width)) : Theme.centre(host.width, width)
             width: ld.width
             height: ld.height
             // mini player: from the music box (its left part, next to the clock); quick panel: the centre
@@ -137,6 +137,10 @@ PanelWindow {
         target: "panel"
         function toggle(): void {
             Popup.toggle("panel");
+        }
+        // close whatever pop-up this host shows (used by rice-gapcheck to start from a known state)
+        function close(): void {
+            Popup.close();
         }
         // open the quick panel on its media tab
         function media(): void {

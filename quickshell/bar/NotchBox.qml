@@ -20,7 +20,11 @@ Item {
 
     Shape {
         anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
+        // GeometryRenderer + multisampling: the curve renderer anti-aliased the straight bottom edge into
+        // a faint half row (1.5px against 2px elsewhere, caught by rice-gapcheck)
+        preferredRendererType: Shape.GeometryRenderer
+        layer.enabled: true
+        layer.samples: 8
 
         ShapePath {
             fillColor: Theme.boxFill

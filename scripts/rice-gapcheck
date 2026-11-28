@@ -1,0 +1,413 @@
+#!/usr/bin/env python3
+"""rice-gapcheck: check that windows and the rice's pop-ups keep the same spacing as the window grid.
+
+  rice-gapcheck                 everything: windows, then every pop-up below
+  rice-gapcheck windows         tiled windows only (read from Hyprland, no screenshot)
+  rice-gapcheck bar             the bar boxes' borders: equal on all four sides
+  rice-gapcheck <popup>...      named pop-ups: cheatsheet settings launcher panel
+  rice-gapcheck --shot FILE     measure one screenshot of a pop-up that is already open
+  --keep                        keep the screenshots (paths printed); failures always keep theirs
+
+Rules (G = Hyprland gaps_out, I = gaps_in, B = border_size, bar = bottom of the rice-bar layer):
+  windows   every tiled window's outer border edge is G from the screen sides / bottom and G below
+            the bar where it touches them, and 2*I from the window next to it.
+  pop-ups   the panel's outer border is found by scanning in from each screen edge. Its top is G below
+            the bar, or it is centred (top gap == bottom gap). Left/right are G, or equal (centred).
+            Bottom is G or more (G when the panel is full height).
+            Pop-ups are opened over an empty workspace, then you are put back where you were.
+  borders   bar boxes and pop-up outlines are B pixels thick on every side, like the windows.
+Exits 1 if anything is off by even 1px.
+"""
+import json
+import os
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+
+# The wallpaper picker is a strip along the bottom, not a framed panel, so it is not measured.
+POPUPS = ["cheatsheet", "settings", "launcher", "panel"]
+PERSISTENT = {"panel"}
+OPENERS = {"launcher": ["open", "apps"]}   # layers that stay mapped while closed (rice-panel hosts every pop-up)
+TOL = 0   # exact: a 1px tolerance let a 13px gap pass
+
+
+def sh(*cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout
+
+
+def opt(name, default):
+    try:
+        j = json.loads(sh("hyprctl", "getoption", name, "-j"))
+    except ValueError:
+        return default
+    for k in ("int", "css", "custom", "str"):
+        if k in j:
+            try:
+                return int(str(j[k]).split()[0])
+            except ValueError:
+                pass
+    return default
+
+
+def bar_bottom():
+    """Last pixel row of the bar's boxes + 1, measured on screen (the layer can be taller than its
+    boxes). Falls back to the rice-bar layer's bottom edge."""
+    try:
+        from PIL import Image
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        sh("grim", "-g", "0,0 400x120", path)
+        im = Image.open(path).convert("L")
+        os.remove(path)
+        px = im.load()
+        G = opt("general:gaps_out", 14)
+        x = G   # the first box's left border column
+        ys = [y for y in range(im.size[1]) if px[x, y] > 60]
+        if ys:
+            run_end = ys[0]
+            while run_end + 1 in ys:
+                run_end += 1
+            return run_end + 1
+    except Exception:
+        pass
+    return layer_bottom()
+
+
+def layer_bottom():
+    best = None
+
+    def walk(o):
+        nonlocal best
+        if isinstance(o, dict):
+            if o.get("namespace") == "rice-bar":
+                b = o["y"] + o["h"]
+                best = b if best is None else min(best, b)
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    try:
+        walk(json.loads(sh("hyprctl", "layers", "-j")))
+    except ValueError:
+        pass
+    return best or 0
+
+
+def near(a, b):
+    return a is not None and b is not None and abs(a - b) <= TOL
+
+
+# ---- windows -------------------------------------------------------------------------------
+
+def check_windows(G, I, B, barb):
+    mons = {m["id"]: m for m in json.loads(sh("hyprctl", "monitors", "-j"))}
+    clients = json.loads(sh("hyprctl", "clients", "-j"))
+    active = {m["activeWorkspace"]["id"] for m in mons.values()}
+    bad = 0
+    byws = {}
+    for c in clients:
+        if c["floating"] or c["fullscreen"] or c["workspace"]["id"] not in active or not c["mapped"]:
+            continue
+        byws.setdefault(c["workspace"]["id"], []).append(c)
+    print("windows")
+    if not byws:
+        print("  no tiled windows on the visible workspaces")
+    for ws, cs in sorted(byws.items()):
+        m = mons[cs[0]["monitor"]]
+        sw, shh = m["width"] / m["scale"], m["height"] / m["scale"]
+        mx, my = m["x"], m["y"]
+        boxes = []
+        for c in cs:
+            x0, y0 = c["at"][0] - B - mx, c["at"][1] - B - my
+            x1, y1 = x0 + c["size"][0] + 2 * B, y0 + c["size"][1] + 2 * B
+            boxes.append((c, x0, y0, x1, y1))
+        L = min(b[1] for b in boxes)
+        T = min(b[2] for b in boxes)
+        R = max(b[3] for b in boxes)
+        Bo = max(b[4] for b in boxes)
+        checks = [("left", L, G), ("top below bar", T - barb, G), ("right", sw - R, G), ("bottom", shh - Bo, G)]
+        # neighbours: any two windows facing each other across a gap
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                for p, q in ((a, b), (b, a)):
+                    gap_x = q[1] - p[3]
+                    overlap_y = min(p[4], q[4]) - max(p[2], q[2])
+                    if 0 <= gap_x <= 4 * I + 4 and overlap_y > 0:
+                        checks.append((f"{p[0]['class'][:14]} | {q[0]['class'][:14]}", gap_x, 2 * I))
+                    gap_y = q[2] - p[4]
+                    overlap_x = min(p[3], q[3]) - max(p[1], q[1])
+                    if 0 <= gap_y <= 4 * I + 4 and overlap_x > 0:
+                        checks.append((f"{p[0]['class'][:14]} / {q[0]['class'][:14]}", gap_y, 2 * I))
+        print(f"  workspace {ws} ({len(cs)} tiled)")
+        for name, got, want in checks:
+            ok = near(got, want)
+            bad += not ok
+            print(f"    {name:<34} want {want:>3}  got {round(got):>4}  {'ok' if ok else 'OFF'}")
+    return bad
+
+
+# ---- pop-ups ------------------------------------------------------------------------------
+
+def run_len(px, coords, start, thresh=25):
+    """How many pixels from coords[start] on stay as bright as coords[start] (a border's thickness)."""
+    if start is None:
+        return None
+    v0 = px[coords[start]]
+    n = 0
+    for c in coords[start:]:
+        if abs(px[c] - v0) > thresh:
+            break
+        n += 1
+    return n
+
+
+def first_jump(px, coords, thresh=25):
+    base = statistics.median(px[c] for c in coords[:4])
+    for i, c in enumerate(coords):
+        if abs(px[c] - base) > thresh:
+            return i
+    return None
+
+
+def measure(path, barb, opt_border=2):
+    from PIL import Image
+    im = Image.open(path).convert("L")
+    w, h = im.size
+    px = im.load()
+    ys = [int(h * (0.25 + 0.05 * i)) for i in range(11)]   # 25% .. 75% down
+    xs = [int(w * (0.25 + 0.05 * i)) for i in range(11)]
+
+    def med(vals):
+        vals = [v for v in vals if v is not None]
+        return int(statistics.median(vals)) if vals else None
+
+    def mode(vals):
+        vals = [v for v in vals if v is not None]
+        return statistics.mode(vals) if vals else None
+
+    def edge(lines):
+        """median offset of the first jump along each line, and the border thickness there"""
+        # A bright patch of wallpaper behind the gap also makes a jump; a border is a thin line, so
+        # readings thicker than 4x the window border are dropped, and the most common reading wins.
+        offs, thick = [], []
+        for coords in lines:
+            i = first_jump(px, coords)
+            t = run_len(px, coords, i)
+            if i is None or t is None or t > 4 * max(1, opt_border):
+                continue
+            offs.append(i)
+            thick.append(t)
+        return mode(offs), mode(thick)
+
+    left = edge([[(x, y) for x in range(0, w // 2)] for y in ys])
+    right = edge([[(x, y) for x in range(w - 1, w // 2, -1)] for y in ys])
+    bottom = edge([[(x, y) for y in range(h - 1, h // 2, -1)] for x in xs])
+    top = edge([[(x, y) for y in range(barb, h // 2)] for x in xs])
+    m = {"top": top[0], "left": left[0], "right": right[0], "bottom": bottom[0], "h": h}
+    m["thick"] = {"top": top[1], "left": left[1], "right": right[1], "bottom": bottom[1]}
+    return m
+
+
+def judge(m, G, B, barb):
+    t, l, r, b = m["top"], m["left"], m["right"], m["bottom"]
+    out = []
+    # centred: on the whole screen (top counted from the screen edge) or in the space under the bar
+    centred = t is not None and b is not None and (near(t + barb, b) or near(t, b))
+    out.append(("top", t, near(t, G) or centred, f"{G} below the bar, or centred"))
+    out.append(("left", l, near(l, G) or near(l, r), f"{G}, or equal to right"))
+    out.append(("right", r, near(r, G) or near(r, l), f"{G}, or equal to left"))
+    out.append(("bottom", b, b is not None and b >= G - TOL, f"{G} or more"))
+    for side, th in m["thick"].items():
+        out.append((f"{side} border", th, near(th, B), f"{B}px, like window borders"))
+    return out
+
+
+def check_shot(name, path, G, B, barb, keep):
+    m = measure(path, barb, B)
+    bad = 0
+    print(name)
+    for edge, got, ok, rule in judge(m, G, B, barb):
+        bad += not ok
+        print(f"    {edge:<13} got {got if got is not None else '?':>4}px  want {rule:<24} {'ok' if ok else 'OFF'}")
+    if bad or keep:
+        print("    screenshot:", path)
+    else:
+        os.remove(path)
+    return bad
+
+
+def check_bar(B):
+    """Every bar box's border is B pixels on all four sides."""
+    from PIL import Image
+    fd, path = tempfile.mkstemp(prefix="gapcheck-bar-", suffix=".png")
+    os.close(fd)
+    sh("grim", path)
+    im = Image.open(path).convert("L")
+    w = im.size[0]
+    px = im.load()
+    G = opt("general:gaps_out", 14)
+    top_row = G   # the boxes' top border row
+    boxes, a = [], None
+    for x in range(w + 1):
+        on = x < w and px[x, top_row] > 60
+        if on and a is None:
+            a = x
+        if not on and a is not None:
+            if x - a > 12:
+                boxes.append((a, x - 1))
+            a = None
+    bad = 0
+    print("bar boxes")
+    for a, b in boxes:
+        mid = (a + b) // 2
+        col = [(mid, y) for y in range(top_row, 120)]
+        t = run_len(px, col, 0)
+        # bottom: the last bright run in the column before the background
+        ys = [y for y in range(top_row, 120) if px[mid, y] > 60]
+        bottom_y = ys[-1] if ys else None
+        bo = 0
+        y = bottom_y
+        while y is not None and y >= top_row and px[mid, y] > 60:
+            bo += 1
+            y -= 1
+        my = (top_row + (bottom_y or top_row)) // 2
+        def side_x(y, rng):
+            """x of the border on this row, scanning in from the box end"""
+            for x in rng:
+                if px[x, y] > 60:
+                    return x
+            return None
+        l = run_len(px, [(x, my) for x in range(a, b)], 0)
+        r = run_len(px, [(x, my) for x in range(b, a, -1)], 0)
+        sides = {"top": t, "bottom": bo, "left": l, "right": r}
+        # Skipped, not judged: a filled box (the active workspace, the music bar's progress) has
+        # no separate border to measure, and a curved end (the cut-out around the centre disc)
+        # anti-aliases wider than a straight line. A side is curved when its x moves between rows.
+        q1, q3 = top_row + (my - top_row) // 2, my + (my - top_row) // 2
+        notes = {}
+        for k, rng in (("left", range(a, b)), ("right", range(b, a, -1))):
+            xs_ = [side_x(y, rng) for y in (q1, my, q3)]
+            xs_ = [x for x in xs_ if x is not None]
+            if xs_ and max(xs_) - min(xs_) > 1:
+                notes[k] = "curved"
+        for k, v in sides.items():
+            if v is not None and v > 4 * B:
+                notes[k] = "filled"
+        # joined: another shape's outline starts within a few pixels past this end (the centre
+        # disc between the cpu and mem boxes), so the two lines can't be told apart
+        for k, rng in (("left", range(a - 1, max(a - 7, 0), -1)), ("right", range(b + 1, min(b + 7, w)))):
+            if k not in notes and any(px[x, my] > 60 for x in rng):
+                notes[k] = "joined"
+        # a box filled edge to edge (left and right both run into the fill) has no border to read
+        # on any side: its top / bottom runs would count the fill too
+        if notes.get("left") == "filled" and notes.get("right") == "filled":
+            notes = {k: "filled" for k in sides}
+        judged = {k: v for k, v in sides.items() if k not in notes}
+        ok = all(near(v, B) for v in judged.values())
+        bad += not ok
+        desc = "  ".join(f"{k} {notes.get(k) or v}" for k, v in sides.items())
+        print(f"    box x {a:>4}-{b:<4}  {desc}   {'ok' if ok else 'OFF'}")
+    if bad:
+        print("    screenshot:", path)
+    else:
+        os.remove(path)
+    return bad
+
+
+def layer_open(name):
+    try:
+        layers = json.loads(sh("hyprctl", "layers", "-j"))
+    except ValueError:
+        return False
+    found = False
+
+    def walk(o):
+        nonlocal found
+        if isinstance(o, dict):
+            if str(o.get("namespace", "")).startswith("rice-" + name):
+                found = True
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(layers)
+    return found
+
+
+def wait_layer(name, want, secs=3.0):
+    end = time.time() + secs
+    while time.time() < end:
+        if layer_open(name) == want:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def check_popup(name, G, B, barb, keep):
+    fd, path = tempfile.mkstemp(prefix=f"gapcheck-{name}-", suffix=".png")
+    os.close(fd)
+    # one pop-up at a time: wait for it to map, let its open animation finish, and wait for it to
+    # be gone again before the next, so a shot never catches the previous one
+    if name in PERSISTENT:
+        # its layer stays mapped while closed, so it can't be watched: close, open, wait it out
+        sh("qs", "-c", "rice", "ipc", "call", name, "close")
+        time.sleep(0.8)
+        sh("qs", "-c", "rice", "ipc", "call", name, "toggle")
+        time.sleep(1.5)
+        sh("grim", path)
+        sh("qs", "-c", "rice", "ipc", "call", name, "close")
+        time.sleep(0.8)
+    else:
+        # a toggle sent right as the previous pop-up lets go of the keyboard can be dropped: retry
+        # explicit open where the pop-up has one (toggle flips whatever state it is in)
+        opener = OPENERS.get(name, ["toggle"])
+        for _ in range(3):
+            sh("qs", "-c", "rice", "ipc", "call", name, *opener)
+            if wait_layer(name, True, 1.5):
+                break
+        time.sleep(1.0)
+        sh("grim", path)
+        sh("qs", "-c", "rice", "ipc", "call", name, "toggle")
+        wait_layer(name, False)
+        time.sleep(1.0)
+    return check_shot(name, path, G, B, barb, keep)
+
+
+def main():
+    args = sys.argv[1:]
+    keep = "--keep" in args
+    args = [a for a in args if a != "--keep"]
+    G, I, B, barb = opt("general:gaps_out", 14), opt("general:gaps_in", 6), opt("general:border_size", 2), bar_bottom()
+    print(f"gaps_out {G}  gaps_in {I}  border {B}  bar bottom {barb}\n")
+    bad = 0
+    if "--shot" in args:
+        bad += check_shot(args[args.index("--shot") + 1], args[args.index("--shot") + 1], G, B, barb, True)
+    else:
+        targets = args or ["windows", "bar"] + POPUPS
+        home = json.loads(sh("hyprctl", "activeworkspace", "-j")).get("id")
+        popups = [t for t in targets if t not in ("windows", "bar")]
+        for t in [t for t in targets if t in ("windows", "bar")]:
+            bad += check_windows(G, I, B, barb) if t == "windows" else check_bar(B)
+            print()
+        if popups:
+            # pop-ups are measured over an empty workspace, so window edges behind them can't be
+            # mistaken for the panel's edge; the workspace you were on comes back afterwards
+            sh("hyprctl", "dispatch", 'hl.dsp.focus({ workspace = "empty" })')
+            time.sleep(0.5)
+            try:
+                for t in popups:
+                    bad += check_popup(t, G, B, barb, keep)
+                    print()
+            finally:
+                if home is not None:
+                    sh("hyprctl", "dispatch", "hl.dsp.focus({ workspace = %d })" % home)
+    print("all spacing ok" if not bad else f"{bad} spacing problem(s)")
+    sys.exit(1 if bad else 0)
+
+
+if __name__ == "__main__":
+    main()

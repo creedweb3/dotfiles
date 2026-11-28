@@ -13,8 +13,7 @@ var groups = [
         ["terminal", "SUPER+T", {c: ["kitty"]}, "terminal"],
         ["files", "SUPER+E", {c: ["kitty", "-e", "yazi"]}, "files"],
         ["browser", "SUPER+B", {c: ["brave"]}, "browser"],
-        ["settings", "SUPER+S", {ipc: "settings"}, "settings"],
-        ["audio settings", "CTRL+ALT+V", {c: ["pavucontrol"]}, "audio"]]],
+        ["settings", "SUPER+S", {ipc: "settings"}, "settings"]]],
     ["windows", [
         ["close window", "SUPER+Q", {d: "hl.dsp.window.close()"}, "close"],
         ["fullscreen", "SUPER+F", {d: 'hl.dsp.window.fullscreen({ action = "toggle" })'}, "fullscreen"],
@@ -45,29 +44,31 @@ var groups = [
         ["mic mute", "SUPER+U", {c: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]}, "micmute"],
         ["play / pause (keys)", "CTRL+SUPER+Space", {c: ["playerctl", "play-pause"]}, "playpause"],
         ["next track", "CTRL+SUPER+=", {c: ["playerctl", "next"]}, "next"],
-        ["previous track", "CTRL+SUPER+-", {c: ["playerctl", "previous"]}, "prev"]]],
+        ["previous track", "CTRL+SUPER+-", {c: ["playerctl", "previous"]}, "prev"],
+        ["audio settings", "CTRL+ALT+V", {c: ["pavucontrol"]}, "audio"]]],
     ["system", [
         ["quick panel", "SUPER+X", {ipc: "panel"}, "panel"],
         ["pick wallpaper", "SUPER+W", {ipc: "wallpaper"}, "wallpaper"],
-        ["screenshot region", "SUPER+SHIFT+S", {c: ["sh", "-c", "grim -g \"$(slurp)\" - | wl-copy"]}, "screenshot"],
-        ["colour picker", "SUPER+SHIFT+C", {c: ["hyprpicker", "-a"]}, "picker"],
         ["lock", "SUPER+L", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-lock\""]}, "lock"],
         ["shortcuts sheet", "SUPER+/", null, "sheet"],
+        ["power menu", "CTRL+ALT+Delete", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "power"]}, "session"],
+        ["clear notifications", "CTRL+ALT+C", {c: ["qs", "-c", "rice", "ipc", "call", "notifs", "clear"]}, "clearnotifs"],
+        ["sleep", "SUPER+SHIFT+L", {c: ["systemctl", "suspend"]}, "sleep"]]],
+    ["tools", [
+        ["screenshot region", "SUPER+SHIFT+S", {c: ["sh", "-c", "grim -g \"$(slurp)\" - | wl-copy"]}, "screenshot"],
+        ["colour picker", "SUPER+SHIFT+C", {c: ["hyprpicker", "-a"]}, "picker"],
         ["clipboard history", "SUPER+V", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "clip"]}, "clipboard"],
         ["emoji", "SUPER+.", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "emoji"]}, "emoji"],
-        ["power menu", "CTRL+ALT+Delete", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "power"]}, "session"],
         ["screenshot screen", "Print", null, "screenfull"],
         ["record screen", "CTRL+ALT+R", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-record\""]}, "record"],
-        ["record region", "SUPER+SHIFT+ALT+R", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-record\" region"]}, "recordregion"],
-        ["clear notifications", "CTRL+ALT+C", {c: ["qs", "-c", "rice", "ipc", "call", "notifs", "clear"]}, "clearnotifs"],
-        ["sleep", "SUPER+SHIFT+L", {c: ["systemctl", "suspend"]}, "sleep"]]]]
+        ["record region", "SUPER+SHIFT+ALT+R", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-record\" region"]}, "recordregion"]]]]
 
 var MEDIA = {XF86AudioPlay: ["play"], XF86AudioRaiseVolume: ["vol +", "vol −"], XF86AudioMute: ["mute"]}
 var NAME = {Return: "⏎", Enter: "⏎", arrows: "← ↑ ↓ →", "1..9, 0": "1 – 0", "1..9": "1 – 9", Delete: "del", SUPER_L: "tap super", Print: "prt", SHIFT: "shift", CTRL: "ctrl", ALT: "alt"}
 // short labels for the lit keys; anything else uses the first word of the action
 var SHORT = {"app launcher": "run", settings: "setup", browser: "web", terminal: "term", "close window": "close", fullscreen: "full",
     "music (special)": "music", "chat (special)": "chat", "browser (special)": "web", "system monitor (special)": "btop", "mic mute": "mic", "quick panel": "panel", "pick wallpaper": "wall",
-    "shortcuts sheet": "help", "move focus": "focus"}
+    "shortcuts sheet": "help", "narrower / wider": "size", "clipboard history": "clip", "pin on all workspaces": "pin", "move focus": "focus"}
 
 // The drawn keyboard: every row is 15 units. [label, width]; right-hand duplicates carry a trailing
 // space so only the left ones light up.
@@ -82,8 +83,8 @@ var ROWS = [
 function parse(s) {
     if (MEDIA[s]) return {sup: false, k: MEDIA[s]}
     let p = s.split("+")
-    const sup = p[0] === "SUPER"
-    if (sup) p = p.slice(1)
+    const sup = p.indexOf("SUPER") >= 0
+    p = p.filter(x => x !== "SUPER")
     return {sup: sup, k: p.map(x => NAME[x] || x.toLowerCase())}
 }
 

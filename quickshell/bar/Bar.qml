@@ -44,9 +44,11 @@ PanelWindow {
     // un-build starts, so Hyprland's window animation runs alongside it and reads as one motion.
     // A workspace-switch peek is the exception: it floats over the windows (see `floating`).
     exclusionMode: autoHide && (!barShown || floating) ? ExclusionMode.Ignore : ExclusionMode.Normal
-    // The space windows give up, worked out in screen pixels: down to the boxes' last pixel row plus
-    // Hyprland's 14px gap. The automatic size rounds down at a fractional ui scale, leaving 13px.
-    exclusiveZone: Math.ceil((14 + Math.floor(Theme.barHeight * Theme.uiScale) - Math.floor(margins.top * Theme.uiScale)) / Theme.uiScale)
+    // The space windows give up, in whole screen pixels: from the layer's top down to just past the
+    // boxes' last pixel row (Hyprland then adds its 14px gaps_out). Box top and height are snapped to
+    // pixels (Theme.snap). The zone is a whole number of units (Quickshell rounds it), hence the ceil.
+    // Checked with rice-gapcheck: windows sit gaps_out below the boxes.
+    exclusiveZone: Math.ceil((Math.round((Theme.barTop + Theme.barHeight) * Theme.uiScale) - Math.floor(margins.top * Theme.uiScale)) / Theme.uiScale)
     color: "transparent"
     // hidden, only the top-edge strip takes the mouse (windows are under the rest)
     mask: autoHide && !barShown ? edgeRegion : null

@@ -30,7 +30,7 @@ Singleton {
     property real winBorder: 2      // border_size, screen pixels
     property real winTint: 0.4      // border_tint, 0-1
     // in shell units: Hyprland's border is not scaled by the ui size, so this cancels the scale out
-    readonly property real border: winBorder / uiScale
+    readonly property real border: snap(winBorder / uiScale)
     // focused window: the accent at Hyprland's alpha (ee)
     readonly property color edge: alpha(accent, 0xee / 255)
     // other windows: the tint's share of accent (alpha ee) mixed into muted (alpha 66), alpha too
@@ -48,11 +48,22 @@ Singleton {
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
     readonly property int fontSize: 12
     readonly property int smallSize: 11
-    readonly property int gap: Prefs.gap  // space between bar boxes (Settings > Bar)
-    readonly property int boxHeight: 26
+    // Snap a size to whole screen pixels. The shell runs at a fractional scale (125%: 1 unit = 1.25px),
+    // so a 26-unit box is 32.5px: the half pixel was cut off the bottom border, which drew 1px against
+    // 2px on the other sides. Sizes and positions that set where an outline lands go through these.
+    function snap(v) { return Math.round(v * uiScale) / uiScale }
+    function snapUp(v) { return Math.ceil(v * uiScale - 0.001) / uiScale }
+    // an even number of pixels, so a centred panel has the same gap on both sides
+    function snapEven(v) { return Math.round(v * uiScale / 2) * 2 / uiScale }
+    // where a box of size `size` starts to sit centred in `room`, on a whole pixel
+    function centre(room, size) { return snap((room - size) / 2) }
+    readonly property real gap: snap(Prefs.gap)  // space between bar boxes (Settings > Bar)
+    // 26 units, rounded down to whole pixels (32px at 125%): the bar's reserved space only comes in
+    // whole units, and 32px is the height that puts windows exactly gaps_out below the boxes.
+    readonly property real boxHeight: Math.floor(26 * uiScale) / uiScale
     // the bar is exactly as tall as its boxes, so the boxes sit the same 14px from the screen top
     // as from the windows below and the screen sides
-    readonly property int barHeight: boxHeight
+    readonly property real barHeight: boxHeight
     readonly property real barTop: 14 / uiScale
     // in line with the windows: Hyprland's gaps_out (14px) is not scaled by the ui size, so this
     // cancels the scale out (17.5px at 125% sat 3px inside the window edges)
@@ -60,7 +71,7 @@ Singleton {
     // Shell size (rice-shell sets QT_SCALE_FACTOR from Settings > Bar > ui size). Everything here is in
     // scaled pixels, but Hyprland's gaps are not, so they shrink by this factor in shell units.
     readonly property real uiScale: Number(Quickshell.env("QT_SCALE_FACTOR")) || 1
-    readonly property real popupTop: barTop + barHeight + Math.round(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
+    readonly property real popupTop: barTop + barHeight + snap(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
 
     // Bumped on every palette or symbol change, so images reload (cache busting).
     property int rev: 0

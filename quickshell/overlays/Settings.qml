@@ -112,11 +112,14 @@ Scope {
 
         Rectangle {
             id: frame
-            anchors.centerIn: parent
-            width: 800
-            height: 560
+            // centred on whole pixels, even-pixel size, outlined like a window (rice-gapcheck)
+            x: Theme.centre(parent.width, width)
+            y: Theme.centre(parent.height, height)
+            width: Theme.snapEven(800)
+            height: Theme.snapEven(560)
             color: Theme.glass
-            border.color: Theme.muted
+            border.width: Theme.border
+            border.color: Theme.line
             focus: true
             Keys.onEscapePressed: root.hide()
             MouseArea { anchors.fill: parent; onClicked: frame.forceActiveFocus() }

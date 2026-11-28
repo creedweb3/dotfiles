@@ -12,6 +12,8 @@ PanelWindow {
     property string name
     property bool open: false
     property real dim: 0.45
+    // true: stop at the bar's reserved space, so the bar stays visible and clickable above the layer
+    property bool keepBar: false
     signal dismissed()
     default property alias content: holder.data
 
@@ -26,7 +28,7 @@ PanelWindow {
     visible: open
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
-    exclusionMode: ExclusionMode.Ignore
+    exclusionMode: keepBar ? ExclusionMode.Normal : ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "rice-" + name
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None

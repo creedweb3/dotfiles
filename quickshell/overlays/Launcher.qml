@@ -436,15 +436,14 @@ Scope {
         Rectangle {
             id: card
             // list: a centred box; side: a column along the left edge, under the bar
-            anchors.centerIn: root.side ? undefined : parent
-            anchors.left: root.side ? parent.left : undefined
-            anchors.top: root.side ? parent.top : undefined
-            anchors.leftMargin: 14
-            anchors.topMargin: 48
-            width: root.side ? 380 : 520
-            height: root.side ? parent.height - 48 - 14 : col.implicitHeight + 4
+            // list: centred on whole pixels; side: a column along the left edge, placed like a tiled
+            // window (gaps_out from the screen edges, under the bar). Outlined like the focused window.
+            x: root.side ? Theme.barSide : Theme.centre(parent.width, width)
+            y: root.side ? Theme.popupTop : Theme.centre(parent.height, height)
+            width: Theme.snapEven(root.side ? 380 : 520)
+            height: root.side ? parent.height - Theme.popupTop - Theme.barSide : Theme.snapEven(col.implicitHeight + 4)
             color: Theme.glass
-            border { color: Theme.accent; width: 2 }
+            border { color: Theme.edge; width: Theme.border }
             layer.enabled: Prefs.shadow
             layer.effect: PanelShadow {}
             MouseArea { anchors.fill: parent }
