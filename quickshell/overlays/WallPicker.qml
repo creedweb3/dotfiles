@@ -164,10 +164,10 @@ Scope {
         Item {
             id: pane
             readonly property bool searchTop: root.look !== "carousel"
-            x: root.look === "side" ? parent.width - width - 14 : root.look === "grid" ? (parent.width - width) / 2 : 0
-            y: root.look === "side" ? 48 : root.look === "grid" ? (parent.height - height) / 2 : parent.height - height - 14
+            x: root.look === "side" ? parent.width - width - Theme.barSide : root.look === "grid" ? (parent.width - width) / 2 : 0
+            y: root.look === "side" ? Theme.popupTop : root.look === "grid" ? (parent.height - height) / 2 : parent.height - height - Theme.barSide
             width: root.look === "side" ? 300 : root.look === "grid" ? Math.min(1100, parent.width * 0.84) : parent.width
-            height: root.look === "side" ? parent.height - 48 - 14
+            height: root.look === "side" ? parent.height - Theme.popupTop - Theme.barSide
                 : root.look === "grid" ? searchRow.height + 8 + Math.min(gridH, parent.height * 0.66)
                 : 182 + 8 + searchRow.height
             readonly property real gridH: Math.ceil(root.shown.length / root.cols) * (((width - 12 * (root.cols - 1)) / root.cols) * 9 / 16 + 50 + 12)

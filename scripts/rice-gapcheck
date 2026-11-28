@@ -6,6 +6,8 @@
   rice-gapcheck bar             the bar boxes' borders: equal on all four sides
   rice-gapcheck <popup>...      named pop-ups: cheatsheet settings launcher panel
   rice-gapcheck --shot FILE     measure one screenshot of a pop-up that is already open
+  rice-gapcheck --watch         stay running: re-check after every window / workspace / pop-up
+                                change and send a notification when something is off (autostarted)
   --keep                        keep the screenshots (paths printed); failures always keep theirs
 
 Rules (G = Hyprland gaps_out, I = gaps_in, B = border_size, bar = bottom of the rice-bar layer):
@@ -37,18 +39,41 @@ def sh(*cmd):
     return subprocess.run(cmd, capture_output=True, text=True, check=False).stdout
 
 
-def opt(name, default):
+def opt(name):
+    """A Hyprland option's live value. No built-in fallback: the rice's settings (hyprland.lua,
+    rice-settings.lua) are the only source, so if Hyprland can't be asked, the check stops."""
     try:
         j = json.loads(sh("hyprctl", "getoption", name, "-j"))
-    except ValueError:
-        return default
-    for k in ("int", "css", "custom", "str"):
-        if k in j:
-            try:
+        for k in ("int", "css", "custom", "str"):
+            if k in j:
                 return int(str(j[k]).split()[0])
-            except ValueError:
-                pass
-    return default
+    except (ValueError, TypeError):
+        pass
+    sys.exit(f"rice-gapcheck: can't read {name} from Hyprland (is it running?)")
+
+
+def grid():
+    """(gaps_out, gaps_in, border_size), live."""
+    return opt("general:gaps_out"), opt("general:gaps_in"), opt("general:border_size")
+
+
+def bright_level(px, w, h):
+    """Brightness that counts as a line: the screen corner's background plus a margin, so a light
+    or dark wallpaper / palette doesn't need a different fixed number."""
+    corner = [px[x, y] for x in range(0, 4) for y in range(h - 4, h)]
+    return statistics.median(corner) + 30
+
+
+def bar_box_top(px, w, h, lvl):
+    """(row, column) of the first bar box's top-left corner, found on screen: the first line pixel
+    in the bar layer's area, scanning rows down from the layer's top."""
+    lay = layer_box("rice-bar")
+    x0, y0 = (lay[0], lay[1]) if lay else (0, 0)
+    for y in range(y0, min(h, y0 + 60)):
+        for x in range(x0, min(w, x0 + 60)):
+            if px[x, y] > lvl:
+                return y, x
+    return None, None
 
 
 def bar_bottom():
@@ -62,17 +87,38 @@ def bar_bottom():
         im = Image.open(path).convert("L")
         os.remove(path)
         px = im.load()
-        G = opt("general:gaps_out", 14)
-        x = G   # the first box's left border column
-        ys = [y for y in range(im.size[1]) if px[x, y] > 60]
-        if ys:
-            run_end = ys[0]
-            while run_end + 1 in ys:
+        lvl = bright_level(px, *im.size)
+        top, x = bar_box_top(px, im.size[0], im.size[1], lvl)
+        if top is not None:
+            # down the first box's left border column to its last row
+            run_end = top
+            while run_end + 1 < im.size[1] and px[x, run_end + 1] > lvl:
                 run_end += 1
             return run_end + 1
     except Exception:
         pass
     return layer_bottom()
+
+
+def layer_box(ns):
+    """(x, y, w, h) of a layer by namespace, or None."""
+    found = None
+
+    def walk(o):
+        nonlocal found
+        if isinstance(o, dict):
+            if o.get("namespace") == ns and found is None:
+                found = (o["x"], o["y"], o["w"], o["h"])
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    try:
+        walk(json.loads(sh("hyprctl", "layers", "-j")))
+    except ValueError:
+        pass
+    return found
 
 
 def layer_bottom():
@@ -172,7 +218,7 @@ def first_jump(px, coords, thresh=25):
     return None
 
 
-def measure(path, barb, opt_border=2):
+def measure(path, barb, opt_border):
     from PIL import Image
     im = Image.open(path).convert("L")
     w, h = im.size
@@ -248,11 +294,14 @@ def check_bar(B):
     im = Image.open(path).convert("L")
     w = im.size[0]
     px = im.load()
-    G = opt("general:gaps_out", 14)
-    top_row = G   # the boxes' top border row
+    lvl = bright_level(px, w, im.size[1])
+    top_row, _ = bar_box_top(px, w, im.size[1], lvl)   # the boxes' top border row, as drawn
+    if top_row is None:
+        print("bar boxes\n    no bar found on screen   OFF")
+        return 1
     boxes, a = [], None
     for x in range(w + 1):
-        on = x < w and px[x, top_row] > 60
+        on = x < w and px[x, top_row] > lvl
         if on and a is None:
             a = x
         if not on and a is not None:
@@ -266,18 +315,18 @@ def check_bar(B):
         col = [(mid, y) for y in range(top_row, 120)]
         t = run_len(px, col, 0)
         # bottom: the last bright run in the column before the background
-        ys = [y for y in range(top_row, 120) if px[mid, y] > 60]
+        ys = [y for y in range(top_row, 120) if px[mid, y] > lvl]
         bottom_y = ys[-1] if ys else None
         bo = 0
         y = bottom_y
-        while y is not None and y >= top_row and px[mid, y] > 60:
+        while y is not None and y >= top_row and px[mid, y] > lvl:
             bo += 1
             y -= 1
         my = (top_row + (bottom_y or top_row)) // 2
         def side_x(y, rng):
             """x of the border on this row, scanning in from the box end"""
             for x in rng:
-                if px[x, y] > 60:
+                if px[x, y] > lvl:
                     return x
             return None
         l = run_len(px, [(x, my) for x in range(a, b)], 0)
@@ -299,7 +348,7 @@ def check_bar(B):
         # joined: another shape's outline starts within a few pixels past this end (the centre
         # disc between the cpu and mem boxes), so the two lines can't be told apart
         for k, rng in (("left", range(a - 1, max(a - 7, 0), -1)), ("right", range(b + 1, min(b + 7, w)))):
-            if k not in notes and any(px[x, my] > 60 for x in rng):
+            if k not in notes and any(px[x, my] > lvl for x in rng):
                 notes[k] = "joined"
         # a box filled edge to edge (left and right both run into the fill) has no border to read
         # on any side: its top / bottom runs would count the fill too
@@ -377,11 +426,123 @@ def check_popup(name, G, B, barb, keep):
     return check_shot(name, path, G, B, barb, keep)
 
 
+def quiet(fn, *a):
+    """Run a check with its report captured: (problem count, the OFF lines)."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        n = fn(*a)
+    lines = [l.strip() for l in buf.getvalue().splitlines() if l.rstrip().endswith("OFF")]
+    return n, lines
+
+
+def watch():
+    """Live mode: re-check after every change Hyprland reports, notify only about new problems.
+
+    Listens on Hyprland's event socket. A window opening, closing, moving, floating, going fullscreen
+    or a workspace switch re-checks the tiled windows (no screenshot, instant) and the bar boxes.
+    Bar outlines that drift from Hyprland's settings are fixed on the spot (the shell re-reads the
+    live values, a plain redraw) and only reported if that didn't fix them. Layout problems are code
+    bugs, not drift, so those are reported, never patched over.
+    A rice pop-up opening (openlayer rice-*) is measured from a screenshot once its animation is
+    done, without opening or closing anything. Changes are batched (0.8s quiet), and the same
+    problem is reported once until it clears. The quick panel's layer never closes, so it is only
+    checked by the manual run.
+    """
+    import fcntl
+    import socket
+    # one watcher per session: a second copy (autostart plus a manual start) quits quietly
+    lock = open(os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "rice-gapcheck.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid()), "hypr", sig, ".socket2.sock")
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(path)
+    s.settimeout(0.8)
+    WIN_EVENTS = ("openwindow", "closewindow", "movewindow", "movewindowv2", "changefloatingmode",
+                  "fullscreen", "workspace", "workspacev2", "activespecial", "monitoradded", "monitorremoved")
+    pending_win, pending_popups, reported, buf = False, set(), set(), b""
+    last_bar = 0.0
+
+    def report(problems, what):
+        new = [p for p in problems if (what, p) not in reported]
+        for p in problems:
+            reported.add((what, p))
+        # forget problems that cleared, so they are reported again if they come back
+        for key in [k for k in reported if k[0] == what and k[1] not in problems]:
+            reported.discard(key)
+        if new:
+            body = "\n".join(new[:6]) + (f"\n… {len(new) - 6} more" if len(new) > 6 else "")
+            sh("notify-send", "-a", "rice-gapcheck", "-u", "normal", f"spacing off: {what}", body)
+            print(f"[{time.strftime('%H:%M:%S')}] {what}: " + " | ".join(new), flush=True)
+
+    while True:
+        try:
+            data = s.recv(4096)
+            if not data:
+                return
+            buf += data
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                ev, _, arg = line.decode(errors="replace").partition(">>")
+                if ev in WIN_EVENTS:
+                    pending_win = True
+                elif ev == "openlayer" and arg.startswith("rice-") and arg not in ("rice-bar", "rice-panel"):
+                    pending_popups.add(arg[len("rice-"):])
+        except socket.timeout:
+            pass
+        if not (pending_win or pending_popups):
+            continue
+        G, I, B = grid()
+        barb = bar_bottom()
+        if pending_win:
+            pending_win = False
+            n, off = quiet(check_windows, G, I, B, barb)
+            report(off, "windows")
+            if time.time() - last_bar > 10:   # the bar redraws often (music, clock): at most every 10s
+                last_bar = time.time()
+                n, off = quiet(check_bar, B)
+                if off:
+                    # Fixable live: the shell's outlines have drifted from Hyprland's border size.
+                    # Hand it the live value (an instant redraw, nothing moves), then look again;
+                    # only a problem that survives the fix is reported.
+                    # the shell re-reads gaps and border from Hyprland itself (theme.sync)
+                    sh("qs", "-c", "rice", "ipc", "call", "theme", "sync")
+                    time.sleep(0.8)
+                    n, off2 = quiet(check_bar, B)
+                    if not off2:
+                        print(f"[{time.strftime('%H:%M:%S')}] bar: borders resynced to {B}px", flush=True)
+                    off = off2
+                report(off, "bar")
+        for name in list(pending_popups):
+            pending_popups.discard(name)
+            time.sleep(1.0)   # let the open animation finish
+            if not layer_open(name):
+                continue
+            fd, shot = tempfile.mkstemp(prefix=f"gapcheck-{name}-", suffix=".png")
+            os.close(fd)
+            sh("grim", shot)
+            n, off = quiet(check_shot, name, shot, G, B, barb, False)
+            report(off, name)
+
+
 def main():
     args = sys.argv[1:]
+    if "--watch" in args:
+        try:
+            watch()
+        except (ConnectionError, OSError) as e:
+            print("rice-gapcheck --watch:", e, file=sys.stderr)
+            sys.exit(1)
+        return
     keep = "--keep" in args
     args = [a for a in args if a != "--keep"]
-    G, I, B, barb = opt("general:gaps_out", 14), opt("general:gaps_in", 6), opt("general:border_size", 2), bar_bottom()
+    G, I, B = grid()
+    barb = bar_bottom()
     print(f"gaps_out {G}  gaps_in {I}  border {B}  bar bottom {barb}\n")
     bad = 0
     if "--shot" in args:

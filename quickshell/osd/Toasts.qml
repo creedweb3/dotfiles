@@ -24,8 +24,8 @@ PanelWindow {
     }
     // in line with the windows' edges (Hyprland's gaps_out, which the ui scale does not touch)
     margins {
-        bottom: Math.round(14 / Theme.uiScale) + 6
-        left: Math.round(14 / Theme.uiScale) + 6
+        bottom: Theme.barSide + 6
+        left: Theme.barSide + 6
     }
     implicitWidth: 280
     implicitHeight: Math.max(1, stack.implicitHeight)

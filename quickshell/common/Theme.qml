@@ -60,18 +60,29 @@ Singleton {
     readonly property real gap: snap(Prefs.gap)  // space between bar boxes (Settings > Bar)
     // 26 units, rounded down to whole pixels (32px at 125%): the bar's reserved space only comes in
     // whole units, and 32px is the height that puts windows exactly gaps_out below the boxes.
-    readonly property real boxHeight: Math.floor(26 * uiScale) / uiScale
-    // the bar is exactly as tall as its boxes, so the boxes sit the same 14px from the screen top
+    // Worked out from the live gap: the bar reserves space in whole shell units (barZone), which
+    // Hyprland rounds down to pixels; the box height is whatever makes that land exactly on the
+    // boxes' last row, so windows sit gaps_out below them for any gap and ui scale (~26 units tall).
+    readonly property int barZone: {
+        const s = uiScale, m = Math.floor(Math.floor(barTop) * s);
+        return Math.ceil((winGapsOut + Math.floor(26 * s) - m) / s);
+    }
+    readonly property real boxHeight: (Math.floor(Math.floor(Math.floor(barTop) * uiScale) + barZone * uiScale) - winGapsOut) / uiScale
+    // The window grid, read live from Hyprland (hyprctl getoption), so the shell follows whatever
+    // hyprland.lua / rice-settings.lua set: nothing here assumes 14px gaps or 2px borders.
+    // Screen pixels; Hyprland's gaps are not scaled by the ui size.
+    property real winGapsOut: 14    // general:gaps_out (until the first read)
+    property real winGapsIn: 6      // general:gaps_in
+    // the bar is exactly as tall as its boxes, so the boxes sit gaps_out from the screen top
     // as from the windows below and the screen sides
     readonly property real barHeight: boxHeight
-    readonly property real barTop: 14 / uiScale
-    // in line with the windows: Hyprland's gaps_out (14px) is not scaled by the ui size, so this
-    // cancels the scale out (17.5px at 125% sat 3px inside the window edges)
-    readonly property real barSide: 14 / uiScale
+    readonly property real barTop: snap(winGapsOut / uiScale)
+    // in line with the windows: gaps_out in shell units (the ui scale is cancelled out)
+    readonly property real barSide: snap(winGapsOut / uiScale)
     // Shell size (rice-shell sets QT_SCALE_FACTOR from Settings > Bar > ui size). Everything here is in
     // scaled pixels, but Hyprland's gaps are not, so they shrink by this factor in shell units.
     readonly property real uiScale: Number(Quickshell.env("QT_SCALE_FACTOR")) || 1
-    readonly property real popupTop: barTop + barHeight + snap(14 / uiScale)   // windows' top edge: bar + Hyprland gaps_out
+    readonly property real popupTop: barTop + barHeight + snap(winGapsOut / uiScale)   // windows' top edge: bar + gaps_out
 
     // Bumped on every palette or symbol change, so images reload (cache busting).
     property int rev: 0
@@ -112,20 +123,47 @@ Singleton {
         path: root.home + "/.config/hypr/rice-settings.lua"
         watchChanges: true
         printErrors: false
-        onFileChanged: reload()
+        onFileChanged: {
+            reload();
+            hyprRead.restart();   // hyprland.lua reloads after the file changes: read the live values then
+        }
         onLoaded: {
             const t = text(), num = k => {
                 const m = new RegExp("^\\s*" + k + "\\s*=\\s*(-?[\\d.]+)", "m").exec(t);
                 return m ? parseFloat(m[1]) : NaN;
             };
-            const b = num("border_size"), tint = num("border_tint");
-            root.winBorder = isNaN(b) ? 2 : b;
+            // border width comes live from Hyprland (hyprProc below); the tint has no Hyprland option
+            const tint = num("border_tint");
             root.winTint = isNaN(tint) ? 0.4 : tint;
         }
-        // no file (settings reset): hyprland.lua's own values
+        // no file (settings reset): hyprland.lua's own values, read live from Hyprland
         onLoadFailed: {
-            root.winBorder = 2;
             root.winTint = 0.4;
+            hyprRead.restart();
+        }
+    }
+
+    // Live window-grid values from Hyprland: at start, after rice-settings.lua changes, and on request
+    // (rice-gapcheck --watch calls `theme sync` when it sees the shell out of step).
+    function syncHypr() { hyprProc.running = true }
+    Timer { id: hyprRead; interval: 600; onTriggered: root.syncHypr() }
+    Process {
+        id: hyprProc
+        running: true
+        command: ["sh", "-c", "for o in gaps_out gaps_in border_size; do hyprctl getoption general:$o -j; echo; done"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const vals = this.text.split("\n").filter(l => l.trim()).map(l => {
+                    try {
+                        const j = JSON.parse(l);
+                        const v = j.int !== undefined ? j.int : String(j.css || j.custom || "").split(" ")[0];
+                        return parseFloat(v);
+                    } catch (e) { return NaN }
+                });
+                if (!isNaN(vals[0])) root.winGapsOut = vals[0];
+                if (!isNaN(vals[1])) root.winGapsIn = vals[1];
+                if (!isNaN(vals[2])) root.winBorder = vals[2];
+            }
         }
     }
 
@@ -166,6 +204,16 @@ Singleton {
             paletteFile.reload();
             wallFile.reload();
             root.rev++;
+        }
+        // match Hyprland's live border_size (rice-gapcheck --watch calls this when the bar's outlines
+        // and the window borders drift apart, e.g. after a border change that skipped rice-settings.lua)
+        function setBorder(px: real): void {
+            if (px >= 0 && px <= 20)
+                root.winBorder = px;
+        }
+        // re-read gaps and border from Hyprland
+        function sync(): void {
+            root.syncHypr();
         }
     }
 }

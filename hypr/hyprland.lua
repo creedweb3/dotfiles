@@ -63,6 +63,10 @@ hl.on("hyprland.start", function()
     -- rice-shell starts `qs -c rice` at the ui size from Settings > Bar
     hl.exec_cmd(home .. "/.local/bin/rice-shell")
     hl.exec_cmd("hypridle")
+    -- Spacing watcher (scripts/rice-gapcheck): re-checks gaps and borders after every window, workspace
+    -- or pop-up change; resyncs the bar's outlines if they drift from the window borders, and sends a
+    -- notification for anything it can't fix. Waits for the shell to be up first.
+    hl.exec_cmd("sleep 8 && " .. home .. "/.local/bin/rice-gapcheck --watch")
     -- Night light (Settings > Display > Night light) if it was left on.
     hl.exec_cmd('f="$HOME/.config/hypr/rice-night.conf"; grep -q "^# rice: enabled=1" "$f" 2>/dev/null && hyprsunset -c "$f"')
     -- No polkit-gnome: Quickshell (overlays/PolkitPopup.qml) is the polkit agent.
@@ -128,7 +132,7 @@ if not okS or type(rs) ~= "table" then
     rs = {}
 end
 hl.config({
-    general = { border_size = rs.border_size },
+    general = { border_size = rs.border_size, gaps_in = rs.gaps_in, gaps_out = rs.gaps_out },
     decoration = { active_opacity = rs.active_opacity, inactive_opacity = rs.inactive_opacity, blur = { size = rs.blur_size } },
 })
 

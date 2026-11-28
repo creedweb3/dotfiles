@@ -30,9 +30,9 @@ PanelWindow {
     readonly property bool autoHide: Prefs.bhide === "auto"
     readonly property bool barShown: !autoHide || popupOpen || hover.hovered || peek.running
     // The layer's top margin must be a whole number at the ui scale too, so it lands short of the
-    // 14px gap (13 at 125%); the content is pushed down by the rest, as edgeInset does at the sides,
-    // so the boxes sit exactly 14px from the screen top and from the windows below.
-    readonly property real topInset: autoHide ? 0 : (14 - Math.floor(Math.floor(Theme.barTop) * Theme.uiScale)) / Theme.uiScale
+    // gaps_out (Theme.winGapsOut, live from Hyprland); the content is pushed down by the rest, as edgeInset does at the sides,
+    // so the boxes sit exactly gaps_out from the screen top and from the windows below.
+    readonly property real topInset: autoHide ? 0 : (Theme.winGapsOut - Math.floor(Math.floor(Theme.barTop) * Theme.uiScale)) / Theme.uiScale
     margins {
         top: autoHide ? 0 : Math.floor(Theme.barTop)
         left: Math.floor(Theme.barSide)
@@ -48,7 +48,7 @@ PanelWindow {
     // boxes' last pixel row (Hyprland then adds its 14px gaps_out). Box top and height are snapped to
     // pixels (Theme.snap). The zone is a whole number of units (Quickshell rounds it), hence the ceil.
     // Checked with rice-gapcheck: windows sit gaps_out below the boxes.
-    exclusiveZone: Math.ceil((Math.round((Theme.barTop + Theme.barHeight) * Theme.uiScale) - Math.floor(margins.top * Theme.uiScale)) / Theme.uiScale)
+    exclusiveZone: autoHide ? Math.ceil((Math.round((Theme.barTop + Theme.barHeight) * Theme.uiScale) - Math.floor(margins.top * Theme.uiScale)) / Theme.uiScale) : Theme.barZone
     color: "transparent"
     // hidden, only the top-edge strip takes the mouse (windows are under the rest)
     mask: autoHide && !barShown ? edgeRegion : null
@@ -163,7 +163,7 @@ PanelWindow {
     // The layer's side margin must be a whole number at the ui scale, so it lands a pixel short of
     // Hyprland's 14px window gap (13 at 125%). The content is inset by the rest, so the bar's edges
     // sit exactly on the window borders.
-    readonly property real edgeInset: (14 - Math.floor(Math.floor(Theme.barSide) * Theme.uiScale)) / Theme.uiScale
+    readonly property real edgeInset: (Theme.winGapsOut - Math.floor(Math.floor(Theme.barSide) * Theme.uiScale)) / Theme.uiScale
     // Auto-hide: the bar pixel-builds in where the mouse touched the top edge and un-builds when it
     // leaves (as the panels open), fast-start so it answers at once; windows shrink and grow
     // alongside, so nothing is ever covered.
@@ -196,8 +196,8 @@ PanelWindow {
     // between the hidden gap (14px) and below the bar, over 200ms on the "snap" curve
     // (hyprland.lua). The bar only draws above it, so a square never lands on a window that has
     // not moved out of the way yet.
-    readonly property real winEdgeHidden: 14 / Theme.uiScale
-    readonly property real winEdgeShown: Theme.barTop + Theme.barHeight + 14 / Theme.uiScale
+    readonly property real winEdgeHidden: Theme.winGapsOut / Theme.uiScale
+    readonly property real winEdgeShown: Theme.barTop + Theme.barHeight + Theme.winGapsOut / Theme.uiScale
     property real winEdge: !autoHide || (barShown && !floating) ? winEdgeShown : winEdgeHidden
     // where the bar may draw down to: the window edge, or below the bar while it floats over them
     readonly property real drawEdge: floating ? winEdgeShown : winEdge
@@ -223,7 +223,7 @@ PanelWindow {
         height: Theme.barHeight
         // rides the window's top edge: the bar's bottom stays one gap above it, so the bar travels
         // down with the window (pushing it) while it pixel-builds, and back up as it hides
-        y: bar.autoHide ? Math.min(Theme.barTop, bar.drawEdge - 14 / Theme.uiScale - Theme.barHeight) : bar.topInset
+        y: bar.autoHide ? Math.min(Theme.barTop, bar.drawEdge - Theme.winGapsOut / Theme.uiScale - Theme.barHeight) : bar.topInset
         tile: 14
         duration: 200
         instant: true
