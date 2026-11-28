@@ -14,7 +14,13 @@ Column {
     property string preset: ""
     property var walls: []
 
+    // read again on every theme change, so a preset that failed to switch shows the real one
+    Connections {
+        target: Theme
+        function onRevChanged() { presetList.running = true }
+    }
     Process {
+        id: presetList
         running: true
         command: Ui.presetListCommand
         stdout: StdioCollector {
@@ -63,7 +69,7 @@ Column {
                 model: page.walls
                 Rectangle {
                     required property var modelData
-                    readonly property bool on: modelData === Theme.wallpaperPath
+                    readonly property bool on: modelData === Theme.wallpaperPath || modelData.slice(modelData.lastIndexOf("/") + 1) === Theme.wallpaperName
                     width: grid.cell
                     height: width * 9 / 16
                     color: "transparent"

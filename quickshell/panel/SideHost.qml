@@ -15,9 +15,10 @@ PanelWindow {
     // keeps the last pop-up drawn while it fades out
     property string shownSide: "nc"
 
-    // picks its screen only while closed: once open it stays put until it has gone
+    // follows the bar that opened it (a click on another screen's bar moves it there, even while
+    // open); otherwise picks the focused screen only while closed, so focus moving never carries it
     Binding on screen {
-        when: !host.live
+        when: !host.live || Popup.sideScreen !== ""
         value: Quickshell.screens.find(s => s.name === Popup.sideScreen)
             ?? Quickshell.screens.find(s => Hyprland.focusedMonitor && s.name === Hyprland.focusedMonitor.name)
             ?? Quickshell.screens[0]

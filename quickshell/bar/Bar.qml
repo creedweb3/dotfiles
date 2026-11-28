@@ -29,16 +29,24 @@ PanelWindow {
     // leaves (never while one of its pop-ups is open).
     readonly property bool autoHide: Prefs.bhide === "auto"
     readonly property bool barShown: !autoHide || popupOpen || hover.hovered || peek.running
+    // The layer's top margin must be a whole number at the ui scale too, so it lands short of the
+    // 14px gap (13 at 125%); the content is pushed down by the rest, as edgeInset does at the sides,
+    // so the boxes sit exactly 14px from the screen top and from the windows below.
+    readonly property real topInset: autoHide ? 0 : (14 - Math.floor(Math.floor(Theme.barTop) * Theme.uiScale)) / Theme.uiScale
     margins {
-        top: autoHide ? 0 : Theme.barTop
+        top: autoHide ? 0 : Math.floor(Theme.barTop)
         left: Math.floor(Theme.barSide)
         right: Math.floor(Theme.barSide)
     }
-    implicitHeight: autoHide ? Theme.barTop + Theme.barHeight : Theme.barHeight
+    implicitHeight: autoHide ? Theme.barTop + Theme.barHeight : Theme.barHeight + topInset
     // Shown, it takes its space so windows shrink to make room (nothing is covered); hidden, they
     // grow back into the full height. Both ways the space changes as the 200ms pixel build or
     // un-build starts, so Hyprland's window animation runs alongside it and reads as one motion.
-    exclusionMode: autoHide && !barShown ? ExclusionMode.Ignore : ExclusionMode.Auto
+    // A workspace-switch peek is the exception: it floats over the windows (see `floating`).
+    exclusionMode: autoHide && (!barShown || floating) ? ExclusionMode.Ignore : ExclusionMode.Normal
+    // The space windows give up, worked out in screen pixels: down to the boxes' last pixel row plus
+    // Hyprland's 14px gap. The automatic size rounds down at a fractional ui scale, leaving 13px.
+    exclusiveZone: Math.ceil((14 + Math.floor(Theme.barHeight * Theme.uiScale) - Math.floor(margins.top * Theme.uiScale)) / Theme.uiScale)
     color: "transparent"
     // hidden, only the top-edge strip takes the mouse (windows are under the rest)
     mask: autoHide && !barShown ? edgeRegion : null
@@ -47,10 +55,13 @@ PanelWindow {
         id: edgeRegion
         item: edge
     }
+    // The trigger strip fills most of the 14px gap above the windows while hidden (Hyprland's
+    // gaps_out, not scaled by the ui size), so it is easy to hit, even coming down from a monitor
+    // stacked above, without ever covering a window.
     Item {
         id: edge
         width: parent.width
-        height: 3
+        height: 10 / Theme.uiScale
     }
     HoverHandler {
         id: hover
@@ -76,16 +87,32 @@ PanelWindow {
     // the panel windows are always mapped (PanelHost / SideHost), so the bar can rise at once and
     // still land on top of them: no frame with the bar under the dim
     onPopupOpenChanged: bar.raised = popupOpen
-    // A pop-up window that moves screen is mapped again and lands above a raised bar, covering it
-    // with the dim. Step down for a frame and rise again, so the bar joins the layer on top.
+    // A pop-up window that moves screen is mapped again and lands above a raised bar. While it is
+    // closed that does not matter (it is empty and click-through), so nothing happens then: no
+    // flicker. Only if it opens while the bar is still raised (another pop-up still closing) does the
+    // bar step down for a frame and rise again, landing on top; the new pop-up's dim is still clear
+    // then. A bar that is not raised rises above everything anyway when the next pop-up opens.
+    property bool stale: false
+    onRaisedChanged: if (!raised && !reRaise.running) stale = false
     Connections {
         target: Popup
         function onHostMoved() {
-            if (!bar.raised)
-                return;
-            bar.raised = false;
-            reRaise.restart();
+            if (bar.raised)
+                bar.stale = true;
         }
+        function onModeChanged() {
+            bar.reRaiseIfStale();
+        }
+        function onSideChanged() {
+            bar.reRaiseIfStale();
+        }
+    }
+    function reRaiseIfStale() {
+        if (!stale || !raised || (Popup.mode === "" && Popup.side === ""))
+            return;
+        stale = false;
+        raised = false;
+        reRaise.restart();
     }
     Timer {
         id: reRaise
@@ -139,14 +166,26 @@ PanelWindow {
     // leaves (as the panels open), fast-start so it answers at once; windows shrink and grow
     // alongside, so nothing is ever covered.
     property real revealX: width / 2
+    // Shown only for a workspace-switch peek: the bar floats over the windows for that moment
+    // instead of pushing them down and back up again, so switching workspaces never makes the
+    // windows jump. Stays floating until it has fully un-built, even if the mouse comes to it.
+    property bool floating: false
     onBarShownChanged: {
         if (!autoHide)
             return;
         if (barShown) {
+            floating = !hover.hovered && !popupOpen;
             revealX = hover.hovered ? hover.point.position.x : width / 2;
             slide.play();
         } else {
             slide.unplay();
+        }
+    }
+    Connections {
+        target: slide
+        function onBusyChanged() {
+            if (!slide.busy && !bar.barShown)
+                bar.floating = false;
         }
     }
     onAutoHideChanged: slide.progress = autoHide && !barShown ? 0 : 1
@@ -157,7 +196,9 @@ PanelWindow {
     // not moved out of the way yet.
     readonly property real winEdgeHidden: 14 / Theme.uiScale
     readonly property real winEdgeShown: Theme.barTop + Theme.barHeight + 14 / Theme.uiScale
-    property real winEdge: !autoHide || barShown ? winEdgeShown : winEdgeHidden
+    property real winEdge: !autoHide || (barShown && !floating) ? winEdgeShown : winEdgeHidden
+    // where the bar may draw down to: the window edge, or below the bar while it floats over them
+    readonly property real drawEdge: floating ? winEdgeShown : winEdge
     Behavior on winEdge {
         enabled: bar.autoHide
         NumberAnimation {
@@ -170,7 +211,7 @@ PanelWindow {
     Item {
         id: room
         width: parent.width
-        height: bar.autoHide ? Math.max(0, bar.winEdge - 2 / Theme.uiScale) : parent.height
+        height: bar.autoHide ? Math.max(0, bar.drawEdge - 2 / Theme.uiScale) : parent.height
         clip: bar.autoHide
 
     PixelReveal {
@@ -180,7 +221,7 @@ PanelWindow {
         height: Theme.barHeight
         // rides the window's top edge: the bar's bottom stays one gap above it, so the bar travels
         // down with the window (pushing it) while it pixel-builds, and back up as it hides
-        y: bar.autoHide ? Math.min(Theme.barTop, bar.winEdge - 14 / Theme.uiScale - Theme.barHeight) : 0
+        y: bar.autoHide ? Math.min(Theme.barTop, bar.drawEdge - 14 / Theme.uiScale - Theme.barHeight) : bar.topInset
         tile: 14
         duration: 200
         instant: true

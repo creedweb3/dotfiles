@@ -139,7 +139,7 @@ Scope {
             onStreamFinished: {
                 root.walls = this.text.split("\n").filter(x => x).sort().map(p => ({
                     path: p, name: p.slice(root.dir.length + 1).replace(/\.[^.\/]+$/, "")}))
-                root.sel = Math.max(0, root.shown.findIndex(w => w.path === root.original))
+                root.sel = Math.max(0, root.shown.findIndex(w => w.path === root.original || w.path.slice(w.path.lastIndexOf("/") + 1) === Theme.wallpaperName))
             }
         }
     }

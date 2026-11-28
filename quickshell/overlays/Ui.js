@@ -25,22 +25,24 @@ function mark(t, q, c) {
 }
 
 // Switch the anime preset: point wallust's symbol template at the preset's symbol, then re-theme.
-// If the current wallpaper is not one of the preset's, switch to its first one (the copy in
-// ~/Pictures/wallpapers when there is one), else re-theme from the current wallpaper.
+// If the current wallpaper is not one of the preset's, switch to its first one, else re-theme from
+// the current wallpaper. Wallpapers are the preset's own files, by full path, so two presets may
+// have files with the same name (~/Pictures/wallpapers is one flat folder). A current wallpaper set
+// from the ~/Pictures copy still counts as the preset's when the preset has that file name.
 // ~/.config/wallust links to the repo's wallust/, so presets/ sits beside it. `wall` is looked up in
 // ~/.local/bin first: the shell started at login does not have it on PATH.
 // Argv for Quickshell.execDetached; the preset name is passed as $1, never pasted into the script.
 function presetCommand(name) {
     return ["sh", "-c",
-        "d=$(readlink -f \"$HOME/.config/wallust\")/..; [ -f \"$d/presets/$1/symbol.svg\" ] || exit 1; " +
+        "d=$(readlink -f \"$HOME/.config/wallust/..\"); [ -f \"$d/presets/$1/symbol.svg\" ] || exit 1; " +
         "w=\"$HOME/.local/bin/wall\"; [ -x \"$w\" ] || w=wall; " +
         "ln -sfn \"../../presets/$1/symbol.svg\" \"$HOME/.config/wallust/templates/symbol.svg\" || exit 1; " +
-        "cur=$(basename \"$(cat \"$HOME/.cache/wall/current\" 2>/dev/null)\"); " +
-        "[ -n \"$cur\" ] && [ -f \"$d/presets/$1/wallpapers/$cur\" ] && exec \"$w\" --restore; " +
+        "cur=$(cat \"$HOME/.cache/wall/current\" 2>/dev/null); " +
+        "case \"$cur\" in \"$d/presets/$1/wallpapers/\"*) exec \"$w\" --restore ;; " +
+        "\"$HOME/Pictures/wallpapers/\"*) [ -f \"$d/presets/$1/wallpapers/${cur##*/}\" ] && exec \"$w\" --restore ;; esac; " +
         "first=$(find \"$d/presets/$1/wallpapers\" -type f | sort | head -n 1); " +
         "[ -n \"$first\" ] || exec \"$w\" --restore; " +
-        "pic=\"$HOME/Pictures/wallpapers/$(basename \"$first\")\"; [ -f \"$pic\" ] || pic=\"$first\"; " +
-        "exec \"$w\" \"$pic\"",
+        "exec \"$w\" \"$first\"",
         "sh", name]
 }
 

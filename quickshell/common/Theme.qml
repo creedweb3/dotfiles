@@ -66,6 +66,9 @@ Singleton {
     property int rev: 0
     readonly property string symbolPath: "file://" + cacheDir + "/symbol.svg?" + rev
     property string wallpaperPath: ""
+    // its file name: a wallpaper may be set from its preset's folder or from the copy in
+    // ~/Pictures/wallpapers, so lists of the latter match the current one by name
+    readonly property string wallpaperName: wallpaperPath.slice(wallpaperPath.lastIndexOf("/") + 1)
 
     function mix(a, b, t) {
         return Qt.rgba(a.r * t + b.r * (1 - t), a.g * t + b.g * (1 - t), a.b * t + b.b * (1 - t), 1);

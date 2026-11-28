@@ -18,17 +18,24 @@ Column {
     readonly property string dir: Quickshell.env("HOME") + "/Pictures/wallpapers"
     property var presets: []      // names
     property var counts: ({})     // preset -> wallpapers in its folder
-    property var groupFiles: ({}) // preset -> file names of its wallpapers
+    property var groupFiles: ({}) // preset -> full paths of its own wallpapers
     property string presetsDir: ""
-    property string preset: ""
+    property string preset: ""        // the active preset, as wallust's symbol link says
+    // a tile just clicked: shown as switching until the theme change lands (or it gives up)
+    property string pendingPreset: ""
     property var allWalls: []     // everything in ~/Pictures/wallpapers
-    // the arrows and the counter stay inside the current group (all of them if it has none listed)
-    readonly property var walls: {
-        const names = groupFiles[preset] || [];
-        const own = allWalls.filter(w => names.includes(w.slice(w.lastIndexOf("/") + 1)));
-        return own.length ? own : allWalls;
+    // the arrows and the counter stay inside the current group: its own files, by full path, so two
+    // groups may share a file name (all of ~/Pictures/wallpapers if the group has none)
+    readonly property var walls: (groupFiles[preset] || []).length ? groupFiles[preset] : allWalls
+    // where the current wallpaper is in that list: by path, or by name when it was set from the
+    // ~/Pictures/wallpapers copy
+    readonly property int index: {
+        const cur = Theme.wallpaperPath, i = walls.indexOf(cur);
+        if (i >= 0 || !cur.startsWith(dir + "/"))
+            return i;
+        const name = cur.slice(cur.lastIndexOf("/") + 1);
+        return walls.findIndex(w => w.slice(w.lastIndexOf("/") + 1) === name);
     }
-    readonly property int index: walls.indexOf(Theme.wallpaperPath)
 
     function setWall(path) {
         Quickshell.execDetached(["sh", "-c", "w=\"$HOME/.local/bin/wall\"; [ -x \"$w\" ] || w=wall; exec \"$w\" \"$1\"", "sh", path]);
@@ -39,7 +46,46 @@ Column {
             setWall(walls[((index < 0 ? 0 : index + d) % n + n) % n]);
     }
 
+    // Read again whenever the panel opens and whenever the theme changes (a wallpaper or preset
+    // switch from here, Settings > Theme or the `wall` command), so nothing here goes stale.
+    function refresh() {
+        presetList.running = true;
+        groupList.running = true;
+        wallList.running = true;
+    }
+    Connections {
+        target: Theme
+        function onRevChanged() {
+            root.refresh();
+        }
+    }
+    Connections {
+        target: Popup
+        function onModeChanged() {
+            if (Popup.mode === "panel")
+                root.refresh();
+        }
+    }
+
+    function pickPreset(name) {
+        if (name === preset && pendingPreset === "")
+            return;
+        pendingPreset = name;
+        pendingTimer.restart();
+        Quickshell.execDetached(Ui.presetCommand(name));
+    }
+    // the switch failed or never re-themed: stop showing it as switching
+    Timer {
+        id: pendingTimer
+        interval: 6000
+        onTriggered: {
+            root.pendingPreset = "";
+            root.refresh();
+        }
+    }
+
     Process {
+        id: presetList
         running: true
         command: Ui.presetListCommand
         stdout: StdioCollector {
@@ -47,14 +93,19 @@ Column {
                 const lines = this.text.split("\n").filter(x => x);
                 root.presets = lines.filter(x => x[0] !== "=");
                 root.preset = (lines.find(x => x[0] === "=") || "=").slice(1);
+                if (root.preset === root.pendingPreset) {
+                    root.pendingPreset = "";
+                    pendingTimer.stop();
+                }
             }
         }
     }
     // where the presets live, and how many wallpapers each one has
     Process {
+        id: groupList
         running: true
-        // the presets folder, then one "<preset> <file name>" line per wallpaper
-        command: ["sh", "-c", "d=$(readlink -f \"$HOME/.config/wallust\")/../presets; readlink -f \"$d\"; for p in \"$d\"/*/; do n=$(basename \"$p\"); find \"$p/wallpapers\" -type f 2>/dev/null | while read -r f; do echo \"$n $(basename \"$f\")\"; done; done"]
+        // the presets folder, then one "<preset> <full path>" line per wallpaper
+        command: ["sh", "-c", "d=$(readlink -f \"$HOME/.config/wallust/../presets\"); echo \"$d\"; for p in \"$d\"/*/; do p=${p%/}; n=${p##*/}; find \"$p/wallpapers\" -type f 2>/dev/null | sort | while read -r f; do echo \"$n $f\"; done; done"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const lines = this.text.split("\n").filter(x => x), c = {}, g = {};
@@ -72,6 +123,7 @@ Column {
         }
     }
     Process {
+        id: wallList
         running: true
         command: ["find", root.dir, "-type", "f", "(", "-iname", "*.jpg", "-o", "-iname", "*.jpeg", "-o", "-iname", "*.png", "-o", "-iname", "*.webp", ")"]
         stdout: StdioCollector {
@@ -185,11 +237,20 @@ Column {
                     id: tile
                     required property string modelData
                     readonly property bool on: modelData === root.preset
+                    readonly property bool switching: modelData === root.pendingPreset
                     width: (tiles.width - tiles.spacing * 2) / 3
                     height: 58
                     color: on ? Theme.alpha(Theme.accent, 0.16) : "transparent"
                     border.width: 1
                     border.color: on || tileMouse.containsMouse ? Theme.accent : Theme.muted
+                    // switching: the border pulses until the new theme lands
+                    SequentialAnimation on opacity {
+                        running: tile.switching
+                        loops: Animation.Infinite
+                        alwaysRunToEnd: true
+                        NumberAnimation { to: 0.45; duration: 350; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1; duration: 350; easing.type: Easing.InOutSine }
+                    }
 
                     Row {
                         x: 8
@@ -222,10 +283,7 @@ Column {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.preset = tile.modelData;
-                            Quickshell.execDetached(Ui.presetCommand(tile.modelData));
-                        }
+                        onClicked: root.pickPreset(tile.modelData)
                     }
                 }
             }
