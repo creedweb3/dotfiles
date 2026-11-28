@@ -9,7 +9,7 @@ import "../common"
 // A full-screen layer below the bar strip dims what is behind and/or the pop-up casts a
 // shadow (Settings > Panels > behind open panels: Prefs.depth, Prefs.sdim); clicking
 // outside or pressing Escape closes. The bar itself stays clickable.
-// IPC: `qs -c rice ipc call panel toggle` (SUPER+C), `... panel system disk` (a system detail view).
+// IPC: `qs -c rice ipc call panel toggle` (SUPER+X), `... panel system disk` (a system detail view).
 PanelWindow {
     id: host
 

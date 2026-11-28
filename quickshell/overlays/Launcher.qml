@@ -10,7 +10,7 @@ import "Ui.js" as Ui
 import "Calc.js" as Calc
 import "LaunchRows.js" as LR
 
-// App launcher (SUPER+D). The first character of the search picks the mode, or Tab / the chips:
+// App launcher (tap SUPER). The first character of the search picks the mode, or Tab / the chips:
 //   apps  (none)  desktop apps, recent first. A typed path, link, #colour, sum or shell command gets its
 //                 own actions on top (open in yazi, kitty here, copy hex/rgb/hsl, run in kitty ...);
 //                 → on an app shows what else it can do (its desktop actions, copy command, quit)

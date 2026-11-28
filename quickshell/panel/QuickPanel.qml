@@ -1,7 +1,7 @@
 import QtQuick
 import "../common"
 
-// The quick panel (SUPER+C, or click the bar's centre): tabs Dashboard, Media, System, Deck, Theme.
+// The quick panel (SUPER+X, or click the bar's centre): tabs Dashboard, Media, System, Deck, Theme.
 // The panel keeps the tallest height it has shown, so switching tabs does not make it jump.
 Rectangle {
     id: root

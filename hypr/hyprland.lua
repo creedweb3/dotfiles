@@ -188,6 +188,9 @@ for name, class in pairs(special) do
         opacity = "0.96 0.96",
     })
 end
+-- Apps (kitty among them) ask to open maximized, which on a busy workspace looked like a new terminal
+-- opening fullscreen. Ignore the request: windows tile; SUPER+F / SUPER+ALT+F still maximize on demand.
+hl.window_rule({ name = "no-maximize-request", match = { class = ".*" }, suppress_event = "maximize" })
 hl.window_rule({
     name = "float-tools",
     match = { class = "^(pavucontrol|blueman-manager|nm-connection-editor|openthx|dev\\.openthx\\.openthx)$" },
@@ -220,8 +223,9 @@ pcall(hl.define_submap, "rice-record", function()
 end)
 
 -- Apps
-hl.bind(K("launcher", mod .. " + D"), hl.dsp.exec_cmd(qs .. "launcher toggle"))
-hl.bind(K("terminal", mod .. " + Return"), hl.dsp.exec_cmd(terminal))
+-- Tap SUPER on its own (release: only when no other key was pressed with it), as in Caelestia.
+hl.bind(K("launcher", mod .. " + SUPER_L"), hl.dsp.exec_cmd(qs .. "launcher toggle"), { release = true })
+hl.bind(K("terminal", mod .. " + T"), hl.dsp.exec_cmd(terminal))
 hl.bind(K("files", mod .. " + E"), hl.dsp.exec_cmd(files))
 hl.bind(K("browser", mod .. " + B"), hl.dsp.exec_cmd(browser))
 hl.bind(K("settings", mod .. " + S"), hl.dsp.exec_cmd(qs .. "settings toggle"))
@@ -232,7 +236,7 @@ hl.bind(K("close", mod .. " + Q"), hl.dsp.window.close())
 hl.bind(K("fullscreen", mod .. " + F"), hl.dsp.window.fullscreen({ action = "toggle" }))
 -- Float: a window made floating opens at 60% x 70% of the screen, centred, instead of keeping
 -- its tiled (often full-screen) size and sliding under the bar.
-hl.bind(K("float", mod .. " + V"), function()
+hl.bind(K("float", mod .. " + ALT + space"), function()
     hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
     local w = hl.get_active_window()
     if not (w and w.floating) then
@@ -259,19 +263,19 @@ hl.bind(mod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 for i = 1, 10 do
     local key = i % 10
     hl.bind(mod .. " + " .. key, hl.dsp.focus({ workspace = i }))
-    hl.bind(mod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
+    hl.bind(mod .. " + ALT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
 hl.bind(mod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mod .. " + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
 -- music and chat: rice-special starts the app if it isn't running, then toggles the workspace
 hl.bind(K("music", mod .. " + M"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special music"))
-hl.bind(K("chat", mod .. " + X"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special chat"))
+hl.bind(K("chat", mod .. " + C"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special chat"))
 -- browser and system monitor: rice-special starts the window the first time, then toggles it
 hl.bind(K("browserspecial", mod .. " + SHIFT + B"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special browser"))
 hl.bind(K("sysmon", mod .. " + grave"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special sysmon"))
 
 -- System
-hl.bind(K("panel", mod .. " + C"), hl.dsp.exec_cmd(qs .. "panel toggle"))
+hl.bind(K("panel", mod .. " + X"), hl.dsp.exec_cmd(qs .. "panel toggle"))
 hl.bind(K("wallpaper", mod .. " + W"), hl.dsp.exec_cmd(qs .. "wallpaper toggle"))
 hl.bind(K("screenshot", mod .. " + SHIFT + S"), hl.dsp.exec_cmd('grim -g "$(slurp)" - | wl-copy'))
 hl.bind(K("picker", mod .. " + SHIFT + C"), hl.dsp.exec_cmd("hyprpicker -a"))
@@ -329,7 +333,7 @@ hl.bind(mod .. " + SHIFT + equal", grow(0, 10), { repeating = true })
 hl.bind("CTRL + " .. mod .. " + left", hl.dsp.focus({ workspace = "-1" }), { repeating = true })
 hl.bind("CTRL + " .. mod .. " + right", hl.dsp.focus({ workspace = "+1" }), { repeating = true })
 for i = 1, 10 do
-    hl.bind(mod .. " + ALT + " .. (i % 10), hl.dsp.window.move({ workspace = i, follow = false }))
+    hl.bind(mod .. " + SHIFT + " .. (i % 10), hl.dsp.window.move({ workspace = i, follow = false }))
 end
 
 -- Window extras
@@ -359,7 +363,7 @@ hl.bind(K("pip", mod .. " + ALT + backslash"), function()
 end)
 
 -- Tools: launcher modes, screenshots, recording, notifications, sleep
-hl.bind(K("clipboard", mod .. " + SHIFT + V"), hl.dsp.exec_cmd(qs .. "launcher open clip"))
+hl.bind(K("clipboard", mod .. " + V"), hl.dsp.exec_cmd(qs .. "launcher open clip"))
 hl.bind(K("emoji", mod .. " + period"), hl.dsp.exec_cmd(qs .. "launcher open emoji"))
 hl.bind(K("session", "CTRL + ALT + Delete"), hl.dsp.exec_cmd(qs .. "launcher open power"))
 hl.bind(K("screenfull", "Print"), hl.dsp.exec_cmd(

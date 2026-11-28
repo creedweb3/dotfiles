@@ -9,8 +9,8 @@
 // which writes ~/.config/hypr/rice-keys.lua. Rows without one use several keys, the mouse or a media key.
 var groups = [
     ["apps", [
-        ["app launcher", "SUPER+D", {ipc: "launcher"}, "launcher"],
-        ["terminal", "SUPER+Return", {c: ["kitty"]}, "terminal"],
+        ["app launcher", "SUPER+SUPER_L", {ipc: "launcher"}, "launcher"],
+        ["terminal", "SUPER+T", {c: ["kitty"]}, "terminal"],
         ["files", "SUPER+E", {c: ["kitty", "-e", "yazi"]}, "files"],
         ["browser", "SUPER+B", {c: ["brave"]}, "browser"],
         ["settings", "SUPER+S", {ipc: "settings"}, "settings"],
@@ -18,7 +18,7 @@ var groups = [
     ["windows", [
         ["close window", "SUPER+Q", {d: "hl.dsp.window.close()"}, "close"],
         ["fullscreen", "SUPER+F", {d: 'hl.dsp.window.fullscreen({ action = "toggle" })'}, "fullscreen"],
-        ["float", "SUPER+V", {d: 'hl.dsp.window.float({ action = "toggle" })'}, "float"],
+        ["float", "SUPER+ALT+Space", {d: 'hl.dsp.window.float({ action = "toggle" })'}, "float"],
         ["move focus", "SUPER+arrows", null],
         ["resize", "SUPER+right drag", null],
         ["switch window", "ALT+Tab", {d: "hl.dsp.window.cycle_next()"}],
@@ -30,12 +30,12 @@ var groups = [
         ["picture-in-picture", "SUPER+ALT+\\", null, "pip"]]],
     ["workspaces", [
         ["go to workspace", "SUPER+1..9, 0", {d: "hl.dsp.focus({ workspace = 1 })"}],
-        ["move window to workspace", "SUPER+SHIFT+1..9", {d: "hl.dsp.window.move({ workspace = 1 })"}],
-        ["send window, stay here", "SUPER+ALT+1..9", null],
+        ["move window to workspace", "SUPER+ALT+1..9", {d: "hl.dsp.window.move({ workspace = 1 })"}],
+        ["send window, stay here", "SUPER+SHIFT+1..9", null],
         ["previous / next", "CTRL+SUPER+arrows", {d: 'hl.dsp.focus({ workspace = "+1" })'}],
         ["next / previous", "SUPER+scroll", {d: 'hl.dsp.focus({ workspace = "e+1" })'}],
         ["music (special)", "SUPER+M", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" music"]}, "music"],
-        ["chat (special)", "SUPER+X", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" chat"]}, "chat"],
+        ["chat (special)", "SUPER+C", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" chat"]}, "chat"],
         ["browser (special)", "SUPER+SHIFT+B", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" browser"]}, "browserspecial"],
         ["system monitor (special)", "SUPER+`", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-special\" sysmon"]}, "sysmon"]]],
     ["media", [
@@ -47,13 +47,13 @@ var groups = [
         ["next track", "CTRL+SUPER+=", {c: ["playerctl", "next"]}, "next"],
         ["previous track", "CTRL+SUPER+-", {c: ["playerctl", "previous"]}, "prev"]]],
     ["system", [
-        ["quick panel", "SUPER+C", {ipc: "panel"}, "panel"],
+        ["quick panel", "SUPER+X", {ipc: "panel"}, "panel"],
         ["pick wallpaper", "SUPER+W", {ipc: "wallpaper"}, "wallpaper"],
         ["screenshot region", "SUPER+SHIFT+S", {c: ["sh", "-c", "grim -g \"$(slurp)\" - | wl-copy"]}, "screenshot"],
         ["colour picker", "SUPER+SHIFT+C", {c: ["hyprpicker", "-a"]}, "picker"],
         ["lock", "SUPER+L", {c: ["sh", "-c", "exec \"$HOME/.local/bin/rice-lock\""]}, "lock"],
         ["shortcuts sheet", "SUPER+/", null, "sheet"],
-        ["clipboard history", "SUPER+SHIFT+V", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "clip"]}, "clipboard"],
+        ["clipboard history", "SUPER+V", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "clip"]}, "clipboard"],
         ["emoji", "SUPER+.", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "emoji"]}, "emoji"],
         ["power menu", "CTRL+ALT+Delete", {c: ["qs", "-c", "rice", "ipc", "call", "launcher", "open", "power"]}, "session"],
         ["screenshot screen", "Print", null, "screenfull"],
@@ -63,7 +63,7 @@ var groups = [
         ["sleep", "SUPER+SHIFT+L", {c: ["systemctl", "suspend"]}, "sleep"]]]]
 
 var MEDIA = {XF86AudioPlay: ["play"], XF86AudioRaiseVolume: ["vol +", "vol −"], XF86AudioMute: ["mute"]}
-var NAME = {Return: "⏎", Enter: "⏎", arrows: "← ↑ ↓ →", "1..9, 0": "1 – 0", "1..9": "1 – 9", Delete: "del", Print: "prt", SHIFT: "shift", CTRL: "ctrl", ALT: "alt"}
+var NAME = {Return: "⏎", Enter: "⏎", arrows: "← ↑ ↓ →", "1..9, 0": "1 – 0", "1..9": "1 – 9", Delete: "del", SUPER_L: "tap super", Print: "prt", SHIFT: "shift", CTRL: "ctrl", ALT: "alt"}
 // short labels for the lit keys; anything else uses the first word of the action
 var SHORT = {"app launcher": "run", settings: "setup", browser: "web", terminal: "term", "close window": "close", fullscreen: "full",
     "music (special)": "music", "chat (special)": "chat", "browser (special)": "web", "system monitor (special)": "btop", "mic mute": "mic", "quick panel": "panel", "pick wallpaper": "wall",
@@ -187,7 +187,8 @@ function clash(row, combo) {
     for (const g of groups) for (const r of g[1]) if (r !== row && r[1] === combo) return r[0]
     for (const r of RESERVED) if (r[1] === combo) return r[0]
     if (/^SUPER\+[0-9]$/.test(combo)) return "go to workspace"
-    if (/^SUPER\+SHIFT\+[0-9]$/.test(combo)) return "move window to workspace"
+    if (/^SUPER\+ALT\+[0-9]$/.test(combo)) return "move window to workspace"
+    if (/^SUPER\+SHIFT\+[0-9]$/.test(combo)) return "send window, stay here"
     if (/^SUPER\+(Left|Right|Up|Down)$/.test(combo)) return "move focus"
     if (/^SUPER\+SHIFT\+(Left|Right|Up|Down)$/.test(combo)) return "move window"
     return ""

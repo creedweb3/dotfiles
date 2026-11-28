@@ -48,7 +48,7 @@ Singleton {
         gs: [85, 45, 100],
         // power button (hyprland.lua binds XF86PowerOff; logind must ignore the key, see README)
         pbtn: ["menu", ["menu", "off", "sleep", "nothing"]],
-        // default apps the launcher's >music / >chat and SUPER+Return start (Settings > Default apps)
+        // default apps the launcher's >music / >chat and SUPER+T start (Settings > Default apps)
         dterm: ["kitty", ["kitty", "foot", "alacritty"]],
         dmusic: ["spotify", ["spotify", "tidal-hifi", "mpd"]],
         dchat: ["vesktop", ["vesktop", "discord", "telegram-desktop"]],

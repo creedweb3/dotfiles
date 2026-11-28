@@ -60,16 +60,17 @@ dependencies to find there.
 | Keys | Action |
 |---|---|
 | SUPER+/ | every shortcut; type to search, enter runs one |
-| SUPER+Return | terminal (kitty; Settings > Default apps) |
-| SUPER+D | launcher: apps, `>` rice commands, `=` calculator, `:` emoji, `;` clipboard, `@` power |
+| SUPER+T | terminal (kitty; Settings > Default apps) |
+| tap SUPER | launcher: apps, `>` rice commands, `=` calculator, `:` emoji, `;` clipboard, `@` power |
 | SUPER+E / B | yazi (files) / browser |
 | SUPER+S | settings |
-| SUPER+C | quick panel |
+| SUPER+X | quick panel |
 | SUPER+W | pick a wallpaper (arrows preview, enter applies) and re-theme |
 | SUPER+Q | close window |
-| SUPER+F / V | fullscreen / float |
-| SUPER+1..9, 0 / SUPER+SHIFT+1..9, 0 | workspaces / move window |
-| SUPER+M / X | music / chat special workspace |
+| SUPER+F / SUPER+ALT+Space | fullscreen / float |
+| SUPER+V | clipboard history |
+| SUPER+1..9, 0 / SUPER+ALT+1..9, 0 / SUPER+SHIFT+1..9, 0 | workspaces / move window and follow / move window, stay here |
+| SUPER+M / C | music / chat special workspace |
 | SUPER+SHIFT+B / SUPER+` | browser / system monitor (btop) special workspace; started the first time |
 | SUPER+U | mute the microphone |
 | SUPER+L | lock |
@@ -90,7 +91,7 @@ is the polkit agent).
 
 ## Quick panel
 
-SUPER+C, or click the bar's centre. Tabs: Dashboard, Media, System, Deck and Theme.
+SUPER+X, or click the bar's centre. Tabs: Dashboard, Media, System, Deck and Theme.
 
 - **Deck**: twelve buttons (screenshot, record, colour picker, terminal, files, browser,
   mute mic, game mode, clipboard, emoji, calculator, stay awake). Each runs its line from
@@ -116,7 +117,7 @@ dismiss and clear all. The clock counts what came in since you last opened it.
 The bar's sound, Bluetooth and Wi-Fi icons open small pop-ups on click (volume and
 output, openTHX on / off; devices; networks), each with "more settings". Right click
 still mutes or turns off; scroll on sound changes the volume. While a special
-workspace shows (SUPER+M / X), the workspace numbers turn into its icons.
+workspace shows (SUPER+M / C), the workspace numbers turn into its icons.
 
 ## Settings
 

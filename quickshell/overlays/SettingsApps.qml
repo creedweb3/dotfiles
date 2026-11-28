@@ -66,7 +66,7 @@ Column {
         }
     }
 
-    // terminal, music and chat: rice settings (Prefs), not xdg. SUPER+Return starts the terminal
+    // terminal, music and chat: rice settings (Prefs), not xdg. SUPER+T starts the terminal
     // (hyprland.lua reads it, so it reloads); the launcher's >music and >chat start the other two.
     SetCard {
         title: "start with"
