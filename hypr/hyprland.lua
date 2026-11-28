@@ -69,6 +69,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --watch cliphist store")
     -- Tray applet doubles as the Bluetooth pairing agent (PIN / passkey prompts).
     hl.exec_cmd("blueman-applet")
+    -- Brave's first launch after login was slow (cold start: reading ~0.7GB, GPU and profile setup).
+    -- Start it hidden at login, so SUPER+B only opens a window in the running Brave (~0.3s).
+    hl.exec_cmd("command -v " .. browser .. " >/dev/null && sleep 5 && " .. browser .. " --no-startup-window")
 end)
 
 -- Demo look: 6px between windows (the demo's 12px is two gaps_in), 14px to
@@ -149,11 +152,15 @@ end
 -- Demo motion: views slide with cubic-bezier(.3, 0, .2, 1) over 0.45s; a
 -- special workspace fades in while it grows from 97%.
 hl.curve("soft", { type = "bezier", points = { { 0.3, 0 }, { 0.2, 1 } } })
-hl.animation({ leaf = "windows", enabled = true, speed = 2.5, bezier = "soft", style = "popin 97%" })
--- Moves and resizes start fast and settle (matches the bar's 200ms auto-hide build): the soft
--- curve's slow start read as lag when windows make room for the bar.
+hl.animation({ leaf = "windows", enabled = true, speed = 1.5, bezier = "soft", style = "popin 97%" })
+-- Moves and resizes start fast and settle: the soft curve's slow start read as lag when windows
+-- make room for the bar or a new window (Brave above all) splits the workspace. 150ms.
 hl.curve("snap", { type = "bezier", points = { { 0.22, 1 }, { 0.36, 1 } } })
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "snap" })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 1.5, bezier = "snap" })
+-- Opening windows grow from 85% over 120ms and fade in over 80ms on the snap curve: most of the
+-- motion is in the first frames, so a new window visibly animates in yet shows at once.
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 1.2, bezier = "snap", style = "popin 85%" })
+hl.animation({ leaf = "fadeIn", enabled = true, speed = 0.8, bezier = "snap" })
 hl.animation({ leaf = "border", enabled = true, speed = 2, bezier = "default" })
 hl.animation({ leaf = "fade", enabled = true, speed = 2, bezier = "default" })
 hl.animation({ leaf = "layers", enabled = true, speed = 2.5, bezier = "soft", style = "fade" })
