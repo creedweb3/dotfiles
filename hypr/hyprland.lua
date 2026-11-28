@@ -263,8 +263,9 @@ for i = 1, 10 do
 end
 hl.bind(mod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mod .. " + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
-hl.bind(K("music", mod .. " + M"), hl.dsp.workspace.toggle_special("music"))
-hl.bind(K("chat", mod .. " + X"), hl.dsp.workspace.toggle_special("chat"))
+-- music and chat: rice-special starts the app if it isn't running, then toggles the workspace
+hl.bind(K("music", mod .. " + M"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special music"))
+hl.bind(K("chat", mod .. " + X"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special chat"))
 -- browser and system monitor: rice-special starts the window the first time, then toggles it
 hl.bind(K("browserspecial", mod .. " + SHIFT + B"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special browser"))
 hl.bind(K("sysmon", mod .. " + grave"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-special sysmon"))
@@ -283,8 +284,9 @@ hl.bind("XF86PowerOff", hl.dsp.exec_cmd([[sh -c 'case "$(jq -r ".pbtn // \"menu\
 
 -- Volume, mic, brightness, media (they also work on the lock screen)
 local held = { locked = true, repeating = true }
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 1%+"), held)
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 1%-"), held)
+-- Changing the volume unmutes first, so a muted sink doesn't silently climb.
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), held)
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), held)
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true })
 hl.bind(K("micmute", mod .. " + U"), hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), { locked = true })
@@ -294,3 +296,92 @@ hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tru
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
 hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+hl.bind(K("playpause", "CTRL + " .. mod .. " + space"), hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+hl.bind(K("next", "CTRL + " .. mod .. " + equal"), hl.dsp.exec_cmd("playerctl next"), { locked = true })
+hl.bind(K("prev", "CTRL + " .. mod .. " + minus"), hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+hl.bind(K("audio", "CTRL + ALT + V"), hl.dsp.exec_cmd("pavucontrol"))
+
+-- Extra shortcuts picked from Caelestia (caelestia-dots/caelestia hypr/hyprland/keybinds.lua).
+-- Alt-tab: cycle windows on the workspace and raise the one picked.
+hl.bind("ALT + Tab", function()
+    hl.dispatch(hl.dsp.window.cycle_next())
+    hl.dispatch(hl.dsp.window.bring_to_top())
+end, { repeating = true })
+hl.bind("SHIFT + ALT + Tab", function()
+    hl.dispatch(hl.dsp.window.cycle_next({ next = false }))
+    hl.dispatch(hl.dsp.window.bring_to_top())
+end, { repeating = true })
+
+-- Resize the focused window by 10% of its size; SHIFT for height. Held keys repeat.
+local function grow(x, y)
+    return function()
+        local w = hl.get_active_window()
+        if not (w and w.size) then return end
+        hl.dispatch(hl.dsp.window.resize({ x = math.floor(w.size.x * x / 100), y = math.floor(w.size.y * y / 100), relative = true }))
+    end
+end
+hl.bind(mod .. " + minus", grow(-10, 0), { repeating = true })
+hl.bind(mod .. " + equal", grow(10, 0), { repeating = true })
+hl.bind(mod .. " + SHIFT + minus", grow(0, -10), { repeating = true })
+hl.bind(mod .. " + SHIFT + equal", grow(0, 10), { repeating = true })
+
+-- Previous / next workspace, and send a window to a workspace without following it.
+hl.bind("CTRL + " .. mod .. " + left", hl.dsp.focus({ workspace = "-1" }), { repeating = true })
+hl.bind("CTRL + " .. mod .. " + right", hl.dsp.focus({ workspace = "+1" }), { repeating = true })
+for i = 1, 10 do
+    hl.bind(mod .. " + ALT + " .. (i % 10), hl.dsp.window.move({ workspace = i, follow = false }))
+end
+
+-- Window extras
+hl.bind(K("maximize", mod .. " + ALT + F"), hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(K("pin", mod .. " + P"), hl.dsp.window.pin())
+hl.bind(K("center", "CTRL + " .. mod .. " + backslash"), hl.dsp.window.center())
+-- Picture-in-picture: float, shrink to a quarter of the screen height, park bottom-right, pin.
+local function pip_actions(w)
+    local m = w.monitor or hl.get_active_monitor()
+    local s = m and m.mode
+    if not (s and w.size) then return {} end
+    local k = (s.height / 4) / w.size.y
+    local ww, wh = math.floor(math.max(200, w.size.x * k)), math.floor(math.max(150, w.size.y * k))
+    local off = math.min(s.width, s.height) * 0.03
+    return {
+        hl.dsp.window.resize({ x = ww, y = wh, window = w }),
+        hl.dsp.window.move({ x = math.floor(m.x + s.width - ww - off), y = math.floor(m.y + s.height - wh - off), relative = false, window = w }),
+        hl.dsp.window.set_prop({ prop = "keep_aspect_ratio", value = "true", window = w }),
+    }
+end
+hl.bind(K("pip", mod .. " + ALT + backslash"), function()
+    local w = hl.get_active_window()
+    if not w then return end
+    if not w.floating then hl.dispatch(hl.dsp.window.float()) end
+    for _, d in ipairs(pip_actions(w)) do hl.dispatch(d) end
+    hl.dispatch(hl.dsp.window.pin({ action = "on", window = "address:" .. w.address }))
+end)
+
+-- Tools: launcher modes, screenshots, recording, notifications, sleep
+hl.bind(K("clipboard", mod .. " + SHIFT + V"), hl.dsp.exec_cmd(qs .. "launcher open clip"))
+hl.bind(K("emoji", mod .. " + period"), hl.dsp.exec_cmd(qs .. "launcher open emoji"))
+hl.bind(K("session", "CTRL + ALT + Delete"), hl.dsp.exec_cmd(qs .. "launcher open power"))
+hl.bind(K("screenfull", "Print"), hl.dsp.exec_cmd(
+    'f="$HOME/Pictures/Screenshots/shot-$(date +%Y%m%d-%H%M%S).png"; mkdir -p "${f%/*}"; ' ..
+    'grim -o "$(hyprctl monitors -j | jq -r \'.[] | select(.focused) | .name\')" "$f" && wl-copy < "$f" && notify-send screenshot "saved and copied"'),
+    { locked = true })
+hl.bind(K("record", "CTRL + ALT + R"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-record"))
+hl.bind(K("recordregion", mod .. " + SHIFT + ALT + R"), hl.dsp.exec_cmd(home .. "/.local/bin/rice-record region"))
+hl.bind(K("clearnotifs", "CTRL + ALT + C"), hl.dsp.exec_cmd(qs .. "notifs clear"), { locked = true })
+-- hypridle locks before sleeping (before_sleep_cmd), so this wakes to the lock screen.
+hl.bind(K("sleep", mod .. " + SHIFT + L"), hl.dsp.exec_cmd("systemctl suspend"))
+
+-- Touchpad: three-finger swipe left/right changes workspace.
+pcall(hl.gesture, { fingers = 3, direction = "horizontal", action = "workspace" })
+
+-- Browser picture-in-picture windows float, stay pinned and keep their shape, bottom-right.
+hl.window_rule({
+    name = "pip",
+    match = { title = "^Picture(-| )in(-| )[Pp]icture$" },
+    float = true,
+    pin = true,
+    keep_aspect_ratio = true,
+    size = { "monitor_w * 0.25", "monitor_h * 0.25" },
+    move = { "monitor_w * 0.98 - window_w", "monitor_h * 0.97 - window_h" },
+})

@@ -1,0 +1,23 @@
+#!/bin/sh
+# rice-record [region]: start a screen recording, or stop the one running (same key again).
+#   (no arg)  the focused monitor
+#   region    an area picked with slurp
+# Saves to ~/Videos/rec-<date>.mp4. The quick panel's record button (deck.conf) uses wf-recorder
+# too, so either one stops the other's recording.
+set -u
+if pidof wf-recorder >/dev/null; then
+    pkill -INT -x wf-recorder
+    notify-send record "saved to ~/Videos"
+    exit 0
+fi
+mkdir -p "$HOME/Videos"
+out="$HOME/Videos/rec-$(date +%Y%m%d-%H%M%S).mp4"
+if [ "${1:-}" = region ]; then
+    g=$(slurp) || exit 0
+    set -- -g "$g"
+else
+    mon=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+    set -- -o "$mon"
+fi
+notify-send record "recording… press the same keys to stop"
+exec wf-recorder "$@" -f "$out" >/dev/null 2>&1

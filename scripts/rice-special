@@ -1,5 +1,6 @@
 #!/bin/sh
-# rice-special browser|sysmon: show or hide a special workspace, starting its window the first time.
+# rice-special browser|sysmon|music|chat: show or hide a special workspace, starting its app the first time.
+#   music    Spotify, else Tidal (whichever is installed); chat  Vesktop, else Discord / Telegram
 # hyprland.lua sends windows of class rice-browser / rice-sysmon to special:browser / special:sysmon.
 #   browser  Brave in its own profile (~/.local/share/rice-browser), so it is a separate process
 #            whose window keeps the rice-browser class; the normal browser (SUPER+B) is untouched.
@@ -7,18 +8,22 @@
 set -eu
 name=${1:-}
 case $name in
-    browser) cls=rice-browser
+    browser) cls='^rice-browser$'
              start() { setsid -f brave --class=rice-browser --user-data-dir="$HOME/.local/share/rice-browser" >/dev/null 2>&1; } ;;
-    sysmon)  cls=rice-sysmon
+    sysmon)  cls='^rice-sysmon$'
              start() { setsid -f kitty --class rice-sysmon -e btop >/dev/null 2>&1; } ;;
-    *) echo "usage: rice-special browser|sysmon" >&2; exit 2 ;;
+    music)   cls='^(Spotify|spotify|tidal-hifi|TIDAL|rice-music)$'
+             start() { for a in spotify-launcher spotify tidal-hifi; do command -v $a >/dev/null && { setsid -f $a >/dev/null 2>&1; return; }; done; } ;;
+    chat)    cls='^(vesktop|discord|org\.telegram\.desktop|telegram-desktop)$'
+             start() { for a in vesktop discord telegram-desktop; do command -v $a >/dev/null && { setsid -f $a >/dev/null 2>&1; return; }; done; } ;;
+    *) echo "usage: rice-special browser|sysmon|music|chat" >&2; exit 2 ;;
 esac
 
-if ! hyprctl clients -j | jq -e --arg c "$cls" 'any(.[]; .class == $c)' >/dev/null; then
+if ! hyprctl clients -j | jq -e --arg c "$cls" 'any(.[]; .class | test($c))' >/dev/null; then
     start
     # wait (up to 5 s) for the window, so the toggle below shows it
     i=0
-    while [ $i -lt 25 ] && ! hyprctl clients -j | jq -e --arg c "$cls" 'any(.[]; .class == $c)' >/dev/null; do
+    while [ $i -lt 25 ] && ! hyprctl clients -j | jq -e --arg c "$cls" 'any(.[]; .class | test($c))' >/dev/null; do
         sleep 0.2
         i=$((i + 1))
     done
