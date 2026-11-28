@@ -16,7 +16,7 @@ Rectangle {
     width: 248
     height: poster ? 248 : 254 + info.implicitHeight
     color: Theme.glass
-    border.width: 1
+    border.width: Theme.border
     border.color: Theme.line
     clip: true
 

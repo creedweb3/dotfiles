@@ -30,7 +30,7 @@ Rectangle {
     // a slightly lighter surface than the windows: the theme's text colour mixed in;
     // tinted also mixes the accent in (critical ones stay neutral so their red stands out)
     color: Theme.alpha(tinted && !crit ? Theme.mix(Theme.accent, Theme.mix(Theme.fg, Theme.bg, 0.06), 0.09) : Theme.mix(Theme.fg, Theme.bg, 0.07), 0.94)
-    border.width: 1
+    border.width: Theme.border
     border.color: crit ? Theme.crit : Theme.line
     clip: true
 

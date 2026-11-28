@@ -25,15 +25,15 @@ Item {
         ShapePath {
             fillColor: Theme.boxFill
             strokeColor: root.edge
-            strokeWidth: 1
+            strokeWidth: Theme.border
             joinStyle: ShapePath.MiterJoin
             PathSvg {
-                // half-pixel offsets keep the 1px line crisp
+                // inset by half the line, so it sits inside the box like a Rectangle border
                 path: {
-                    const w = root.width, h = root.h, d = root.dx, r = root.r;
+                    const w = root.width, h = root.h, d = root.dx, r = root.r, o = Theme.border / 2;
                     if (root.notchRight)
-                        return `M${w - d} 0.5 H0.5 V${h - 0.5} H${w - d} A${r} ${r} 0 0 1 ${w - d} 0.5 Z`;
-                    return `M${d} 0.5 H${w - 0.5} V${h - 0.5} H${d} A${r} ${r} 0 0 0 ${d} 0.5 Z`;
+                        return `M${w - d} ${o} H${o} V${h - o} H${w - d} A${r} ${r} 0 0 1 ${w - d} ${o} Z`;
+                    return `M${d} ${o} H${w - o} V${h - o} H${d} A${r} ${r} 0 0 0 ${d} ${o} Z`;
                 }
             }
         }

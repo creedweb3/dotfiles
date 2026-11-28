@@ -76,7 +76,7 @@ PanelWindow {
         width: parent.width
         height: 50
         color: Theme.glass
-        border.width: 1
+        border.width: Theme.border
         border.color: Theme.line
         opacity: osd.shown ? 1 : 0
 

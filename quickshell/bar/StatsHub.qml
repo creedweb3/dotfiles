@@ -9,7 +9,7 @@ Item {
 
     readonly property real r: 20
     readonly property bool hovered: mouse.containsMouse
-    readonly property color edge: hovered || Popup.mode === "panel" ? Theme.accent : Theme.line
+    readonly property color edge: hovered || Popup.mode === "panel" ? Theme.edge : Theme.line
 
     implicitWidth: left.width + right.width
     implicitHeight: Theme.boxHeight
@@ -56,7 +56,7 @@ Item {
         x: left.width - width / 2
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.alpha(Theme.panel, 0.9)
-        border.width: 1
+        border.width: Theme.border
         border.color: root.edge
 
         Image {

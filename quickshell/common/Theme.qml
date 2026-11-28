@@ -23,9 +23,21 @@ Singleton {
     property color warn: "#E5A84B"
     readonly property color crit: "#E5534B"
 
-    // Outer boxes (bar boxes, panel edges) mix 40% accent into the line, as the demo's
-    // default "border tint"; lines inside panels stay plain muted.
-    readonly property color line: mix(accent, muted, 0.4)
+    // Outer edges (bar boxes, panel edges) are drawn exactly like the window borders Hyprland draws
+    // (hypr/hyprland.lua, colours from wallust/templates/hypr.lua): the same width in screen pixels
+    // and the same colours, following Settings > Windows / Theme tab > border width and border tint
+    // (~/.config/hypr/rice-settings.lua). Lines inside panels stay plain muted, 1px.
+    property real winBorder: 2      // border_size, screen pixels
+    property real winTint: 0.4      // border_tint, 0-1
+    // in shell units: Hyprland's border is not scaled by the ui size, so this cancels the scale out
+    readonly property real border: winBorder / uiScale
+    // focused window: the accent at Hyprland's alpha (ee)
+    readonly property color edge: alpha(accent, 0xee / 255)
+    // other windows: the tint's share of accent (alpha ee) mixed into muted (alpha 66), alpha too
+    readonly property color line: {
+        const t = Math.max(0, Math.min(1, winTint)), m = mix(accent, muted, t);
+        return Qt.rgba(m.r, m.g, m.b, 0x66 / 255 + (0xee / 255 - 0x66 / 255) * t);
+    }
     // Glass: how much of Hyprland's blur shows through the bar boxes and panels follows
     // Settings > Panels > behind blur (Prefs.sblur 0-12, default 9 -> 61% / 65% fill).
     // At 0 Hyprland does not blur them, so they stay nearly solid.
@@ -79,6 +91,28 @@ Singleton {
         if (typeof p.kind === "string")
             root.kind = p.kind;
         root.rev++;
+    }
+
+    FileView {
+        id: winSettings
+        path: root.home + "/.config/hypr/rice-settings.lua"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            const t = text(), num = k => {
+                const m = new RegExp("^\\s*" + k + "\\s*=\\s*(-?[\\d.]+)", "m").exec(t);
+                return m ? parseFloat(m[1]) : NaN;
+            };
+            const b = num("border_size"), tint = num("border_tint");
+            root.winBorder = isNaN(b) ? 2 : b;
+            root.winTint = isNaN(tint) ? 0.4 : tint;
+        }
+        // no file (settings reset): hyprland.lua's own values
+        onLoadFailed: {
+            root.winBorder = 2;
+            root.winTint = 0.4;
+        }
     }
 
     FileView {

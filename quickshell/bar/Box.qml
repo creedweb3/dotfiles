@@ -1,7 +1,8 @@
 import QtQuick
 import "../common"
 
-// One glass box on the bar: panel colour at 84%, 1px line, accent edge on hover.
+// One glass box on the bar: panel colour at 84%, outlined like a window (Theme.border / line),
+// lit like the focused window on hover.
 Rectangle {
     id: root
 
@@ -18,8 +19,8 @@ Rectangle {
     implicitWidth: row.implicitWidth + padding * 2
     implicitHeight: Theme.boxHeight
     color: Theme.boxFill
-    border.width: 1
-    border.color: active || hovered ? Theme.accent : Theme.line
+    border.width: Theme.border
+    border.color: active || hovered ? Theme.edge : Theme.line
     clip: true
 
     Behavior on border.color {

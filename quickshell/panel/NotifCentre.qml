@@ -12,7 +12,7 @@ Rectangle {
 
     width: 380
     color: Theme.glass
-    border.width: 1
+    border.width: Theme.border
     border.color: Theme.line
 
     SystemClock {

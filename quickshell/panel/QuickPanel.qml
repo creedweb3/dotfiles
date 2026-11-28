@@ -12,7 +12,7 @@ Rectangle {
     width: 500
     height: Math.max(tallest, col.implicitHeight + 28)
     color: Theme.glass
-    border.width: 1
+    border.width: Theme.border
     border.color: Theme.line
 
     // swallow clicks so they do not reach the scrim behind and close the panel

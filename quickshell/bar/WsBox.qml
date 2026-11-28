@@ -19,7 +19,7 @@ Box {
     readonly property bool bright: occupied || Prefs.marker === "frame" || Prefs.marker === "fill"
 
     color: current ? Theme.accent : occupied && Prefs.marker === "fill" ? Theme.alpha(Theme.mix(Theme.accent, Theme.panel, 0.3), 0.84) : Theme.boxFill
-    border.color: current || framed || hovered ? Theme.accent : Theme.line
+    border.color: current || framed || hovered ? Theme.edge : Theme.line
 
     Label {
         id: label
