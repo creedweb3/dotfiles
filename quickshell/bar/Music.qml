@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import "../common"
 
 // Now playing: three eq bars, then "title - artist". Fixed width while a player runs, so the
@@ -40,7 +39,7 @@ Box {
 
         readonly property real titleWidth: probe.implicitWidth
         readonly property bool loop: titleWidth > width
-        readonly property real gap: 2.5 * Theme.fontSize
+        readonly property real gap: Theme.snap(2.5 * Theme.fontSize)
         readonly property real fadeL: loop ? 16 : 0
         readonly property real fadeR: loop ? 20 : 0
         // scroll position, snapped to whole screen pixels so the text stays crisp
@@ -73,46 +72,50 @@ Box {
                 text: root.title
                 loop: view.loop
                 gap: view.gap
-                sx: view.sx - view.fadeL
+                frame: view
+                sx: view.sx
             }
         }
 
-        // the two fading ends
+        // the two fading ends: no effect layer (a layer's resampling shimmers as text slides
+        // through it). Each end is a row of 1-device-pixel slices, each showing the sharp text
+        // clipped to that slice at a stepped opacity.
         Repeater {
             model: view.loop ? [0, 1] : []
             Item {
                 id: edge
                 required property int modelData
                 readonly property bool isRight: modelData === 1
-                x: isRight ? view.width - view.fadeR : 0
-                width: isRight ? view.fadeR : view.fadeL
+                readonly property real wantX: isRight ? view.width - view.fadeR : 0
+                // on whole device pixels, so every slice is exactly one screen pixel
+                x: {
+                    const s = Theme.uiScale
+                    const ox = view.mapToItem(null, 0, 0).x + view.sx * 0
+                    return Math.round((ox + wantX) * s) / s - ox
+                }
+                readonly property int slices: Math.round((isRight ? view.fadeR : view.fadeL) * Theme.uiScale)
+                width: slices / Theme.uiScale
                 height: view.height
-                clip: true
-                layer.enabled: true
-                layer.textureSize: Qt.size(Math.ceil(width * Theme.uiScale * 2), Math.ceil(height * Theme.uiScale * 2))
-                layer.effect: MultiEffect {
-                    maskEnabled: true
-                    maskSource: edgeMask
-                    maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1.0
-                }
-                TitleStrip {
-                    text: root.title
-                    loop: view.loop
-                    gap: view.gap
-                    sx: view.sx - edge.x
-                }
-                Item {
-                    id: edgeMask
-                    anchors.fill: parent
-                    visible: false
-                    layer.enabled: true
-                    Rectangle {
-                        anchors.fill: parent
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0; color: edge.isRight ? "black" : "transparent" }
-                            GradientStop { position: 1; color: edge.isRight ? "transparent" : "black" }
+                Repeater {
+                    model: edge.slices
+                    Item {
+                        id: slice
+                        required property int index
+                        x: index / Theme.uiScale
+                        width: 1 / Theme.uiScale
+                        height: edge.height
+                        clip: true
+                        // fully clear at the outer edge, nearly opaque next to the middle
+                        opacity: {
+                            const t = (index + 0.5) / edge.slices
+                            return edge.isRight ? 1 - t : t
+                        }
+                        TitleStrip {
+                            text: root.title
+                            loop: view.loop
+                            gap: view.gap
+                            frame: view
+                            sx: view.sx
                         }
                     }
                 }
